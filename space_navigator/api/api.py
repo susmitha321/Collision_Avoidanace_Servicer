@@ -82,7 +82,7 @@ class Environment:
         # TODO - calculate crit_distance using probability
         self.crit_distance = 2000  #: Critical convergence distance (meters)
         self.min_distances_in_current_conjunction = np.full(
-            (self.n_debris), np.nan)  # np.nan if not in conjunction.
+            (self.n_debris), np.nan)  # np.nan if not in conjunction. indicating that its not in conjunction
         # np.array, each row contains: (st coord, debr coord, epoch mjd2000)
         self.state_for_min_distances_in_current_conjunction = np.full(
             (self.n_debris, 13), np.nan)
