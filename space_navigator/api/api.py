@@ -138,6 +138,10 @@ class Environment:
 
         # Choose number of steps in linspace, s.t.
         # restep is less then step.
+        
+        #So, when choosing the number of steps in np.linspace, you would want to ensure that num
+        # satisfies the inequality above to make sure restep is less than step.
+        
         n_time_steps_plus_one = int(np.ceil(
             (end_time - curr_time) / step) + 1)
         propagation_grid, retstep = np.linspace(
