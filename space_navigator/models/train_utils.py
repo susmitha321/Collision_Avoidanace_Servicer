@@ -161,7 +161,7 @@ def time_before_first_collision(env, step):
         return collisions[0]['epoch'] - env.get_start_time().mjd2000
     return None
 
-
+#it computes the max time before which we can do the first cam. put 0, 0.5 and 1 to understand. and make a study. 
 def time_before_early_first_maneuver(env, step, max_n_orbits=0.5):
     time_before_collision = time_before_first_collision(env, step)
     if time_before_collision is None:
