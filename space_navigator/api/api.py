@@ -187,11 +187,12 @@ class Environment:
         end_cojunction_debris = np.setdiff1d(
             self.dangerous_debris_in_current_conjunction,
             new_curr_dangerous_debris
-        )  # the debris with which the conjunction has now ceased.
+        )  # the debris with which the conjunction has now ceased are taken into acount
         begin_cojunction_debris = np.setdiff1d(
             new_curr_dangerous_debris,
             self.dangerous_debris_in_current_conjunction
-        )  # the debris with which the conjunction begins.
+        )  # the debris with which the conjunction begins are considered. 
+           #takes the unique values in the first array that are not present in second one
 
         self.dangerous_debris_in_current_conjunction = new_curr_dangerous_debris
 
