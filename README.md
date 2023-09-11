@@ -1,5 +1,5 @@
 
-# Satellite Collision Avoidance
+# Satellite Collision Avoidance using servicer
 
 
 ## Motivation
