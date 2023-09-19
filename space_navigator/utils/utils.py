@@ -113,9 +113,12 @@ def read_environment(path):
     param_type = lines[1].strip()
 
     objects = read_space_objects_from_list(lines[2:], param_type)
-    protected, debris = objects[0], objects[1:]
-
-    return Environment(protected, debris, start_time, end_time)
+    
+    protected = objects[0]
+    servicer  = objects[1]
+    debris    = objects[2:]
+   
+    return Environment(protected, servicer, debris, start_time, end_time)
 
 
 def get_agent(agent_type, model_path='', num_inputs=6, num_outputs=4, hidden_size=64):

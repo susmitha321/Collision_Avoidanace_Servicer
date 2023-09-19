@@ -101,8 +101,11 @@ def reward_func_0(value, thr, r_thr=-1,
         )
     return reward
 
+    ###
+    # add very high reward if its docked but its not necessary.
+    ###
 
-def reward_func(values, thr, reward_func=reward_func_0, *args, **kwargs):
+def reward_func(values, thr, dangerous_debris, reward_func=reward_func_0, *args, **kwargs):
     """Returns reward values for np.array input.
 
     Args:
@@ -110,6 +113,7 @@ def reward_func(values, thr, reward_func=reward_func_0, *args, **kwargs):
         thr (np.array): array of thresholds of the rewarded parameter.
             if the threshold is np.nan, then the reward is 0
             (there is no penalty for the parameter).
+        dangerous_debris: if there are any dangerous debris in conjunction
         reward_func (function): reward function.
         *args, **kwargs: additional arguments of reward_func.
 
@@ -126,8 +130,43 @@ def reward_func(values, thr, reward_func=reward_func_0, *args, **kwargs):
     id_not_nan = np.logical_not(id_nan)
 
     reward[id_nan] = 0.
+      
     if np.count_nonzero(id_not_nan) != 0:
         reward[id_not_nan] = reward_thr_v(values[id_not_nan], thr[id_not_nan])
+    # Handling the last two values differently
+    dock_prob_relpos = values[-2]
+    dock_relvel = values[-1]
+    #print(dock_prob_relpos)
+    
+    # If there are dangerous objects in the conjunction
+    
+    if dangerous_debris:
+        # Reward logic for docking
+        if dock_prob_relpos == 1:  # If docked
+            reward[-2] = 0
+        else:  # If not docked
+            reward[-2] = -1000
+        
+        # Reward logic for docking relative velocity
+        if dock_relvel < thr[-1]:  # If velocity is below threshold
+            reward[-1] = 0
+        else:  # If velocity is above threshold
+            reward[-1] = -1000
+
+    else:  # If there are no dangerous objects in the conjunction
+        # Reward logic for docking
+        if dock_prob_relpos == 1:  # If docked
+            reward[-2] = -1000
+        else:  # If not docked
+            reward[-2] = 0
+        
+        # Reward logic for docking relative velocity
+        if dock_relvel < thr[-1]:  # If velocity is below threshold
+            reward[-1] = -1000
+        else:  # If velocity is above threshold
+            reward[-1] = 0
+    
+    #print(reward)
     return reward
 
 

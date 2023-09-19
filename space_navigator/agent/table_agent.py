@@ -18,12 +18,13 @@ class TableAgent(BaseAgent):
         self.action_idx = 0
 
     def get_action(self, state):
-        """ Provides action for protected object.
+        """ Provides action for protected or servicer based on docking condition object.
 
         Args:
             state (dict): environment state
                 {'coord' (dict):
                     {'st' (np.array with shape (1, 6)): satellite r and Vx, Vy, Vz coordinates.
+                     'servicer' (np.array with shape (1, 6)): satellite r and Vx, Vy, Vz coordinates.
                      'debr' (np.array with shape (n_items, 6)): debris r and Vx, Vy, Vz coordinates.}
                 'trajectory_deviation_coef' (float).
                 'epoch' (pk.epoch): at which time environment state is calculated.

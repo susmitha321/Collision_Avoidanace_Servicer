@@ -2,7 +2,7 @@
 # object movement in space , communication with the space environment
 # by the Agent and state/reward exchanging.
 #
-# In the first implementation wi will have only one protected
+# In the first implementation we will have only one servicer, one protected
 # object. All other objects will be treated as space debris.
 # As a first, we will observe only ideal satellite's trajectories,
 # so that we can describe any object location at time t after the
@@ -18,19 +18,21 @@ from .api_utils import (
 )
 from ..collision import CollProbEstimator
 
-MAX_FUEL_CONSUMPTION = 10
+MAX_FUEL_CONSUMPTION = 15
 
 
 class Environment:
-    """ Environment provides the space environment with space objects: satellites and debris, in it."""
+    """ Environment provides the space environment with space objects: servicer, protected and debris, in it."""
 
-    def __init__(self, protected, debris, start_time, end_time,
+    def __init__(self, protected, servicer, debris, start_time, end_time,
                  coll_prob_thr=1e-4, fuel_cons_thr=10,
                  traj_dev_thr=(100, 0.01, 0.01, 0.01, 0.01, None),
-                 target_osculating_elements=None):
+                 dock_prob_relpos_thr = 1, dock_relvel_thr = 1e-1,
+                 target_osculating_elements = None, is_docked = None):
         """
         Args:
             protected (SpaceObject): protected space object in Environment.
+            servicer (SpaceObject): servicer to dock with protected and perform cam
             debris ([SpaceObject, ]): list of other space objects.
             start_time (pk.epoch): initial time of the environment.
             end_time (pk.epoch): end time of the environment.
@@ -58,16 +60,21 @@ class Environment:
             raise ValueError(f"eccentricity: {traj_dev_thr[1]}, should be in interval (0, 1).")
 
         self.init_params = dict(
-            protected=copy(protected), debris=copy(debris), start_time=start_time,
+            protected=copy(protected), servicer = copy(servicer), debris=copy(debris), start_time=start_time,
             end_time=end_time, coll_prob_thr=coll_prob_thr, fuel_cons_thr=fuel_cons_thr,
-            traj_dev_thr=traj_dev_thr, target_osculating_elements=target_osculating_elements,
+            traj_dev_thr=traj_dev_thr, dock_prob_relpos_thr = dock_prob_relpos_thr, 
+            dock_relvel_thr = dock_relvel_thr, 
+            target_osculating_elements=target_osculating_elements,
         )
 
         self.protected = protected
+        self.servicer = servicer
         self.debris = debris
-
+        
         self.protected_r = protected.get_radius()
-        self.init_fuel = protected.get_fuel()
+        self.servicer_r = servicer.get_radius()
+        self.init_fuel = servicer.get_fuel()
+        
         if target_osculating_elements is None:
             self.init_osculating_elements = np.array(
                 self.protected.osculating_elements(self.init_params["start_time"]))
@@ -76,16 +83,17 @@ class Environment:
         self.trajectory_deviation = None
         self.n_debris = len(debris)
         self.debris_r = np.array([d.get_radius() for d in debris])
-
+        
         self.next_action = pk.epoch(0, "mjd2000")
-
+        
         # TODO - calculate crit_distance using probability
         self.crit_distance = 2000  #: Critical convergence distance (meters)
+        
         self.min_distances_in_current_conjunction = np.full(
             (self.n_debris), np.nan)  # np.nan if not in conjunction. indicating that its not in conjunction
-        # np.array, each row contains: (st coord, debr coord, epoch mjd2000)
+        # np.array, each row contains: (st coord, servicer coord, debr coord, epoch mjd2000)
         self.state_for_min_distances_in_current_conjunction = np.full(
-            (self.n_debris, 13), np.nan)
+            (self.n_debris, 19), np.nan)
         self.dangerous_debris_in_current_conjunction = np.array([])
 
         self.collision_probability_estimator = CollProbEstimator.ChenBai_approach
@@ -93,27 +101,46 @@ class Environment:
             self.n_debris)
         self.total_collision_probability_arr = np.zeros(self.n_debris)
         self.total_collision_probability = None
-
+        
+        # threshold for coll prob between protected and debris
+        
         self.coll_prob_thr = coll_prob_thr
         self.fuel_cons_thr = fuel_cons_thr
         self.traj_dev_thr = traj_dev_thr
+        
+        # threshold for docking between servicer and protected
+        
+        self.dock_prob_relpos_thr = dock_prob_relpos_thr
+        self.dock_relvel_thr = dock_relvel_thr
+        
+        #docking initialization
+        
+        if is_docked is None:
+            self.is_docked = []
+            
+        self.time_to_dock = []
+        
         self._reward_thr = np.concatenate(
-            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr)
-        ).astype(np.float)
+            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr]
+        )).astype(np.float)
 
         self.reward_components = None
         self.reward = None
 
         # initiate state with initial positions
-        st, debr = self.coords_by_epoch(start_time)
-        coord = dict(st=st, debr=debr)
+        st, servicer, debr = self.coords_by_epoch(start_time)
+        coord = dict(st=st, servicer=servicer, debr=debr)
         self.state = dict(
-            coord=coord, epoch=start_time, fuel=self.protected.get_fuel())
+            coord=coord, epoch=start_time, fuel=self.servicer.get_fuel())
 
         self.conjunction_data = []
-
+        
         self._update_all_reward_components(zero_update=True)
-
+        
+        # prob of overlap and relvel
+        self.dock_prob_relpos = self.get_dock_prob_relpos()
+        self.dock_relvel = self.get_dock_relvel() 
+       
     def propagate_forward(self, end_time, step=10e-6, each_step_propagation=False):
         """ Forward propagation.
 
@@ -135,7 +162,7 @@ class Environment:
         elif end_time < curr_time:
             raise ValueError(
                 "end_time should be greater or equal to current time")
-
+        
         # Choose number of steps in linspace, s.t.
         # restep is less then step.
         
@@ -154,10 +181,10 @@ class Environment:
         while s < n_time_steps_plus_one:
             t = propagation_grid[s]
             epoch = pk.epoch(t, "mjd2000")
-            st, debr = self.coords_by_epoch(epoch)
-            coord = dict(st=st, debr=debr)
+            st, servicer, debr = self.coords_by_epoch(epoch)
+            coord = dict(st=st, servicer=servicer, debr=debr)
             self.state = dict(
-                coord=coord, epoch=epoch, fuel=self.protected.get_fuel()
+                coord=coord, epoch=epoch, fuel=self.servicer.get_fuel()
             )
             # dangerous debris, distances
             # and estimation of time to collision with closest debris
@@ -167,7 +194,30 @@ class Environment:
             if time_to_collision_is_finite:
                 self._update_distances_and_probabilities_prior_to_current_conjunction(
                     debr, dist)
-            # calculation of the number of steps forward
+                self._update_dock_prob_relpos()
+                self._update_dock_relvel()
+            if self.dock_prob_relpos and self.dock_relvel < self.dock_relvel_thr: # is docked
+                if not self.time_to_dock:
+                    # dont forget to initialize self.is_docked = None --> done
+                    self.is_docked = True
+                    self.time_to_dock.append(curr_time) # saving all the times, but the first one gives time at which docking happened 
+                
+                    fuel_to_transfer = self.state["fuel"]
+            
+                    ## verify if this is correct, what you meant was to get the fuel of servicer and 
+                    #put the same for protected too if they are docked
+            
+                    self.protected.fuel = fuel_to_transfer
+                    epoch_time = pk.epoch(curr_time, "mjd2000")
+                    elements_new=self.protected.satellite.osculating_elements(epoch_time)
+                    self.servicer.update_osculating_elements(elements_new,epoch_time)
+            
+                     #now both servicer and protected will have same elements and same fuel. 
+                     #for starters just move protected after docking. 
+                     # i am assuming that its like transfer of fuel from servicer to protected, 
+                     # we can make it complex by adding undocking and coming back later. 
+            
+                     # calculation of the number of steps forward
             if each_step_propagation:
                 s += 1
             else:
@@ -296,7 +346,40 @@ class Environment:
             assert np.all(np.abs(deviation[2:6]) <= np.pi), f"bad deviation {deviation}"
 
         self.trajectory_deviation = np.round_(deviation, 6)
+    
+            
+    def _update_dock_prob_relpos(self):
+        # Get the position of the servicer and protected satellite at the current epoch
+        servicer_pos, _ = self.servicer.position(self.state["epoch"])
+        protected_pos, _ = self.protected.position(self.state["epoch"])
 
+        # Compute the Euclidean distance between the two positions
+        distance = np.linalg.norm(np.array(servicer_pos) - np.array(protected_pos))
+
+        # Check if the distance is less than the sum of their radii
+        r_s = self.servicer.get_safe_radius()
+        r_p = self.protected.get_safe_radius()
+        overlap = distance < (r_s + r_p)
+        #print(int(overlap))
+        self.dock_prob_relpos=int(overlap)
+        
+        
+    def _update_dock_relvel(self):
+        # Get the velocity of both the servicer and the protected object.
+        servicer_pos, servicer_vel = self.servicer.position(self.state["epoch"])
+        protected_pos, protected_vel = self.protected.position(self.state["epoch"])
+
+        # Subtract the velocities to get the relative velocity.
+        rel_vel = [sv - pv for sv, pv in zip(servicer_vel, protected_vel)]
+
+        # Calculate the magnitude of the relative velocity.
+        magnitude = sum(v**2 for v in rel_vel)**0.5
+
+        self.dock_relvel = magnitude
+        
+        return magnitude
+            
+            
     def _update_reward(self):
         """Update reward and reward components."""
         values = np.concatenate(
@@ -304,15 +387,22 @@ class Environment:
                 [self.get_total_collision_probability()],
                 [self.get_fuel_consumption()],
                 np.abs(self.get_trajectory_deviation()),
+                [self.get_dock_prob_relpos()],
+                [self.get_dock_relvel()]
             )
         ).astype(np.float)
-        reward_arr = reward_func(values, self._reward_thr)
+        reward_arr = reward_func(values, self._reward_thr, self.dangerous_debris_in_current_conjunction)
+        
         coll_prob_r = reward_arr[0]
         fuel_r = reward_arr[1]
-        traj_dev_r = reward_arr[2:]
+        traj_dev_r = reward_arr[2:8]
+        dock_prob_relpos_r = reward_arr[8]
+        dock_relvel_r = reward_arr[9]
+        
         # reward components
         self.reward_components = {
-            "coll_prob": coll_prob_r, "fuel": fuel_r, "traj_dev": tuple(traj_dev_r)
+            "coll_prob": coll_prob_r, "fuel": fuel_r, "traj_dev": tuple(traj_dev_r), 
+            "dock_prob_relpos": dock_prob_relpos_r, "dock_relvel": dock_relvel_r
         }
         # total reward
         self.reward = np.sum(reward_arr)
@@ -322,8 +412,15 @@ class Environment:
         """Update total collision probability, trajectory deviation, reward components and reward."""
         self._update_total_collision_probability()
         self._update_trajectory_deviation(zero_update=zero_update)
+        self._update_dock_prob_relpos()
+        #print(self.dock_prob_relpos)
+        self._update_dock_relvel()
         self._update_reward()
-
+        
+            ###
+            #update action def below
+            ###
+            
     def act(self, action):
         """ Change velocity for protected object.
         Args:
@@ -333,7 +430,13 @@ class Environment:
         """
         self.next_action = pk.epoch(
             self.state["epoch"].mjd2000 + float(action[3]), "mjd2000")
-        error, fuel_cons = self.protected.maneuver(
+        if not self.is_docked:
+            error, fuel_cons = self.servicer.maneuver(
+            action[:3], self.state["epoch"])
+        else:
+            error, fuel_cons = self.servicer.maneuver(
+            action[:3], self.state["epoch"])
+            error, fuel_cons = self.protected.maneuver(
             action[:3], self.state["epoch"])
         if not error:
             self.state["fuel"] -= fuel_cons
@@ -353,6 +456,13 @@ class Environment:
                 "coll_prob", "fuel", "traj_dev".
         """
         return self.reward_components
+            
+    def get_dock_prob_relpos(self):
+            return self.dock_prob_relpos
+            
+    def get_dock_relvel(self):
+            return self.dock_relvel
+            
 
     def get_reward(self):
         return self.reward
@@ -365,7 +475,7 @@ class Environment:
         return self.state
 
     def get_fuel_consumption(self):
-        return float(self.init_fuel - self.protected.get_fuel())
+        return float(self.init_fuel - self.servicer.get_fuel())
 
     def get_conjunction_data(self):
         # TODO: conjunction_data for each object if set of protected
@@ -384,14 +494,18 @@ class Environment:
         self.init_params["end_time"] = end_time
 
     def coords_by_epoch(self, epoch):
+        
         st_pos, st_v = self.protected.position(epoch)
+        servicer_pos,servicer_v = self.servicer.position(epoch)
         st = np.hstack((np.array(st_pos), np.array(st_v)))[np.newaxis, ...]
+        servicer = np.hstack((np.array(servicer_pos), np.array(servicer_v)))[np.newaxis, ...]
+        
         n_items = len(self.debris)
         debr = np.zeros((n_items, 6))
         for i in range(n_items):
             pos, v = self.debris[i].position(epoch)
             debr[i] = np.array(pos + v)
-        return st, debr
+        return st, servicer, debr
 
     def collision_data(self):
         # TODO: add miss distance thr
@@ -475,7 +589,38 @@ class SpaceObject:
                                                  name)
         else:
             raise ValueError("Unknown initial parameteres type")
+    
+            
+    def update_osculating_elements(self, new_elements, time=None):
+            
+        ###
+        #finish these lines of coding
+        ###
+            
+        """
+        Update the osculating elements of the SpaceObject.
 
+        Args:
+            new_elements (list or tuple): The new osculating elements.
+            epoch (pk.epoch, optional): The epoch at which the elements are provided. 
+                                        If not provided, the current epoch of the object is used.
+        """
+        if not time:
+            time = self.satellite.epoch
+
+        # Extract the current attributes of the satellite
+        mu_central_body = self.satellite.mu_central_body
+        mu_self = self.satellite.mu_self
+        radius = self.satellite.radius
+        safe_radius = self.satellite.safe_radius
+        name = self.get_name()
+
+        # Update the satellite with the new elements
+        self.satellite = pk.planet.keplerian(time, new_elements, mu_central_body, 
+                                             mu_self, radius, safe_radius, name)
+            
+            
+        
     def maneuver(self, action, t_man):
         """ Make manoeuvre for the object.
         Args:

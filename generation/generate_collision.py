@@ -19,6 +19,9 @@ def main(args):
                         default=6600.1, required=False)
     parser.add_argument("-before", "--time_before_start_time", type=float,
                         default=0, required=False)
+    parser.add_argument("-s_s","--servicer_size",type=int,
+                        default=1, required=False)
+    
 
     # debris parameters
     parser.add_argument("-p_s", "--pos_sigma", type=float,
@@ -35,7 +38,7 @@ def main(args):
     # args parsing
     args = parser.parse_args(args)
 
-    n_debris, start_time, end_time = args.n_debris, args.start_time, args.end_time
+    n_debris, start_time, end_time, servicer_size  = args.n_debris, args.start_time, args.end_time, args.servicer_size
     time_before_start_time = args.time_before_start_time
 
     pos_sigma, vel_ratio_sigma = args.pos_sigma, args.vel_ratio_sigma
@@ -47,9 +50,12 @@ def main(args):
         os.makedirs(dirname)
 
     # generation
-    generator = Generator(start_time, end_time)
+    generator = Generator(start_time, end_time, servicer_size)
 
     generator.add_protected()
+    #print(protected.satellite.osculating_parameters(start_time))
+    generator.add_servicer()
+    #print(self.protected.satellite.osculating_parameters(self.start_time))
     for _ in range(n_debris):
         generator.add_debris(pos_sigma, vel_ratio_sigma, i_threshold)
 

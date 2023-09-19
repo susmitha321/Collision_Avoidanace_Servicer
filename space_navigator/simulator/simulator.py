@@ -90,20 +90,24 @@ class Visualizer:
         in real time.
     """
 
-    def __init__(self, curr_time, prob, fuel_cons, traj_dev, reward_components, reward, curr_alert_info):
+    def __init__(self, curr_time, prob, fuel_cons, traj_dev, dock_prob_relpos, dock_relvel, reward_components, reward, curr_alert_info):
         self.fig = plt.figure(figsize=[14, 12])
-        self.gs = gridspec.GridSpec(15, 2)
+        self.gs = gridspec.GridSpec(24, 2)
         self.subplot_3d = self.fig.add_subplot(self.gs[:, 0], projection='3d')
-        self.subplot_3d.set_aspect("equal")
+        self.subplot_3d.set_aspect("auto")
         self.subplot_p = self.fig.add_subplot(self.gs[:3, 1])
         self.subplot_f = self.fig.add_subplot(self.gs[4:7, 1])
         self.subplot_r_t = self.fig.add_subplot(self.gs[8:11, 1])
-        self.subplot_r = self.fig.add_subplot(self.gs[12:, 1])
+        self.subplot_d_p = self.fig.add_subplot(self.gs[12:15,1])
+        self.subplot_d_c = self.fig.add_subplot(self.gs[16:19,1])
+        self.subplot_r = self.fig.add_subplot(self.gs[21:, 1])
         # initialize data for plots
         self.time_arr = [0]
         self.prob_arr = [prob]
         self.fuel_cons_arr = [fuel_cons]
         self.traj_dev = traj_dev
+        self.dock_pos_arr = [dock_prob_relpos]
+        self.dock_vel_arr = [dock_relvel]
         self.reward_components = reward_components
         self.r_traj_dev_arr = [sum(traj_dev)]
         self.reward_arr = [reward]
@@ -114,11 +118,13 @@ class Visualizer:
     def run(self):
         plt.ion()
 
-    def update_data(self, curr_time, prob, fuel_cons, traj_dev, reward_components, reward, curr_alert_info):
+    def update_data(self, curr_time, prob, fuel_cons, traj_dev, dock_prob_relpos, dock_relvel, reward_components, reward, curr_alert_info):
         self.time_arr.append(curr_time)
         self.prob_arr.append(prob)
         self.fuel_cons_arr.append(fuel_cons)
         self.traj_dev = traj_dev
+        self.dock_pos_arr.append(dock_prob_relpos)
+        self.dock_vel_arr.append(dock_relvel)
         self.reward_components = reward_components
         self.r_traj_dev_arr.append(sum(reward_components["traj_dev"]))
         self.reward_arr.append(reward)
@@ -153,6 +159,9 @@ class Visualizer:
         r_coll_prob = self.reward_components["coll_prob"]
         r_fuel = self.reward_components["fuel"]
         r_traj_dev = sum(self.reward_components["traj_dev"])
+        r_prob_dockpos = sum(self.reward_components["dock_prob_relpos"])
+        r_dockvel = sum(self.reward_components["dock_relvel"])
+        
         s = f"""Epoch: {epoch}\n
 Collision Probability: {self.prob_arr[-1]:.5}.
 Fuel Consumption: {self.fuel_cons_arr[-1]:.5} (|dV|).
@@ -163,12 +172,14 @@ Trajectory Deviation:
     W: {self.traj_dev[3]:.5} (rad);
     w: {self.traj_dev[4]:.5} (rad);
     M: {self.traj_dev[5]:.5} (rad).
-
+Docking probability position: {self.dock_pos_arr[-1]:.5}.
+Docking relvel: {self.dock_vel_arr[-1]:.5}.
 Reward Components:
     R Collision Probability: {r_coll_prob:.5};
     R Fuel Consumption: {r_fuel:.5};
-    R Trajectory Deviation: {r_traj_dev:.5}.
-
+    R Trajectory Deviation: {r_traj_dev:.5};
+    R Docking in position: {r_prob_dockpos:.5};
+    R Dcoking in velocity: {r_dockvel:.5}.
 Total Reward: {self.reward_arr[-1]:.5}.
 """
         if self.curr_alert_info:
@@ -193,9 +204,13 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total fuel consumption', ylabel='fuel (dV)')
         self.make_step_on_graph(self.subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
+        self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
+                                title = 'R Docking position', ylabel='dock position')
+        self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
+                                title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(self.subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time (mjd2000)')
-
+        
     def make_step_on_graph(self, ax, time, data, title, ylabel, xlabel=None):
         ax.step(time, data)
         ax.set_title(title)
@@ -221,18 +236,25 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
 
     def save_graphics(self):
         fig = plt.figure(figsize=[7, 12])
-        gs = gridspec.GridSpec(15, 1)
+        gs = gridspec.GridSpec(24, 1)
         subplot_p = fig.add_subplot(gs[:3, 0])
         subplot_f = fig.add_subplot(gs[4:7, 0])
         subplot_r_t = fig.add_subplot(gs[8:11, 0])
-        subplot_r = fig.add_subplot(gs[12:, 0])
-
+        subplot_d_p = fig.add_subplot(gs[12:15, 0])
+        subplot_d_v = fig.add_subplot(gs[16:19, 0])
+        subplot_r = fig.add_subplot(gs[21:, 0])
+        
+        
         self.make_step_on_graph(subplot_p, self.time_arr, self.prob_arr,
                                 title='Total collision probability', ylabel='prob')
         self.make_step_on_graph(subplot_f, self.time_arr, self.fuel_cons_arr,
                                 title='Total fuel consumption', ylabel='fuel (dV)')
         self.make_step_on_graph(subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
+        self.make_step_on_graph(subplot_d_p, self.time_arr, self.dock_pos_arr,
+                                title = 'R Docking position', ylabel='dock position')
+        self.make_step_on_graph(subplot_d_v, self.time_arr, self.dock_vel_arr,
+                                title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time since simulation starts (mjd2000)')
 
@@ -258,7 +280,8 @@ class Simulator:
         self.start_time = self.env.init_params["start_time"]
         self.end_time = self.env.init_params["end_time"]
         self.curr_time = self.start_time
-
+        
+  
         self.step = step
 
         self.vis = None
@@ -269,9 +292,10 @@ class Simulator:
         self.json_log_path = None
 
     def run(self, visualize=False, n_steps_vis=1000, log=True, each_step_propagation=False,
-            print_out=False, json_log=False, n_orbits_alert=1., json_log_path="json_log.json"):
+            print_out=False, json_log=False, n_orbits_alert=5., json_log_path="json_log.json"):
         """
         Args:
+        n orbits chnaged from 1 to 5
             visualize (bool): whether show the simulation or not.
             n_steps_vis (int): number of propagation steps in one step of visualization.
             log (bool): whether log the simulation or not.
@@ -364,6 +388,7 @@ class Simulator:
 
             self.vis = Visualizer(self.curr_time.mjd2000, self.env.get_total_collision_probability(),
                                   self.env.get_fuel_consumption(), self.env.get_trajectory_deviation(),
+                                  self.env.get_dock_prob_relpos(), self.env.get_dock_relvel(),
                                   self.env.get_reward_components(), self.env.get_reward(), self.curr_alert)
             self.vis.run()
             action = np.zeros(4)
@@ -404,11 +429,14 @@ class Simulator:
             if log:
                 self.log_iteration(iteration)
                 self.log_protected_position()
+                self.log_servicer_position() # yet to make a logger for servicer --> done
                 self.log_debris_positions()
+
                 iteration += 1
 
             if visualize:
                 self.plot_protected()
+                self.plot_servicer() # yet to make a plotter for servicer --> done
                 self.plot_debris()
                 self.vis.plot_earth()
                 if n_steps_since_vis % n_steps_vis == 0:
@@ -418,9 +446,16 @@ class Simulator:
                 self.vis.plot_iteration(self.curr_time)
                 self.vis.plot_graphics()
                 if np.not_equal(self.vis.dV_plot, np.zeros(3)).all():
-                    self.vis.plot_action(
-                        self.env.protected.position(self.curr_time)[0], self.curr_time)
-                    self.vis.pause(PAUSE_ACTION_TIME)
+                # Check if the servicer is docked
+                    if self.env.is_docked:
+                        # Perform action on both servicer and protected
+                        self.vis.plot_action(self.env.protected.position(self.curr_time)[0], self.curr_time)
+                        self.vis.plot_action(self.env.servicer.position(self.curr_time)[0], self.curr_time)
+                        self.vis.pause(PAUSE_ACTION_TIME)
+                    else:
+                        # Perform action only on servicer
+                        self.vis.plot_action(self.env.servicer.position(self.curr_time)[0], self.curr_time)
+                        self.vis.pause(PAUSE_ACTION_TIME)
                 else:
                     self.vis.pause(PAUSE_TIME)
                 self.vis.clear()
@@ -459,7 +494,8 @@ class Simulator:
 
         if log:
             self.log_protected_position()
-
+            self.log_servicer_position()
+            self.log_debris_positions()
         if visualize:
             self.update_vis_data()
             self.vis.save_graphics()
@@ -475,7 +511,10 @@ class Simulator:
 
     def log_protected_position(self):
         self.logger.info(strf_position(self.env.protected, self.curr_time))
-
+    
+    def log_servicer_position(self):
+        self.logger.info(strf_position(self.env.servicer, self.curr_time))
+    
     def log_debris_positions(self):
         for obj in self.env.debris:
             self.logger.info(strf_position(obj, self.curr_time))
@@ -546,7 +585,10 @@ class Simulator:
         """ Plot Protected SpaceObject. """
         self.vis.plot_planet(self.env.protected.satellite,
                              t=self.curr_time, size=100, color="black")
-
+    def plot_servicer(self):
+        """ Plot servicer SpaceObject. """
+        self.vis.plot_planet(self.env.servicer.satellite,
+                             t=self.curr_time, size=150, color="red")
     def plot_debris(self):
         """ Plot space debris. """
         cmap = plt.get_cmap('gist_rainbow')
@@ -563,6 +605,8 @@ class Simulator:
             self.env.get_total_collision_probability(),
             self.env.get_fuel_consumption(),
             self.env.get_trajectory_deviation(),
+            self.env.get_dock_prob_relpos(),
+            self.env.get_dock_relvel(),
             self.env.get_reward_components(),
             self.env.get_reward(),
             self.curr_alert)
@@ -572,6 +616,8 @@ class Simulator:
             self.start_time.mjd2000, self.end_time.mjd2000, self.step))
         print("Protected SpaceObject:\n{}".format(
             self.env.protected.satellite))
+        print("Servicer SpaceObject:\n{}".format(
+            self.env.servicer.satellite))
         print("Debris objects:\n")
         for spaceObject in self.env.debris:
             print(spaceObject.satellite)
@@ -582,6 +628,8 @@ class Simulator:
         coll_prob_thr = self.env.coll_prob_thr
         fuel_cons_thr = self.env.fuel_cons_thr
         traj_dev_thr = self.env.traj_dev_thr
+        dock_prob_relpos_thr = self.dock_prob_relpos_thr
+        dock_relvel_thr = self.dock_relvel_thr
         action_table = self.agent.action_table
         action_table_not_empty = not is_action_table_empty(action_table)
         crit_distance = self.env.crit_distance
@@ -589,11 +637,15 @@ class Simulator:
         coll_prob = self.env.get_total_collision_probability()
         fuel_cons = self.env.get_fuel_consumption()
         traj_dev = self.env.get_trajectory_deviation()
+        dock_pos = self.env.get_dock_prob_relpos()
+        dock_vel = self.env.get_dock_relvel()
         total_reward = self.env.get_reward()
         reward_components = self.env.get_reward_components()
         coll_prob_r = reward_components["coll_prob"]
         fuel_r = reward_components["fuel"]
         traj_dev_r = reward_components["traj_dev"]
+        prob_dockpos_r = reward_components["dock_prob_relpos"]
+        dockvel_r = reward_components["dock_relvel"]
         collision_data = self.env.collision_data()
 
         # w/o maneuvers
@@ -608,21 +660,29 @@ class Simulator:
             coll_prob_wo = env_wo.get_total_collision_probability()
             fuel_cons_wo = env_wo.get_fuel_consumption()
             traj_dev_wo = env_wo.get_trajectory_deviation()
+            dock_pos_wo = env_wo.get_dock_prob_relpos()
+            dock_vel_wo = env_wo.get_dock_relvel()
             total_reward_wo = env_wo.get_reward()
             reward_components_wo = env_wo.get_reward_components()
             coll_prob_r_wo = reward_components_wo["coll_prob"]
             fuel_r_wo = reward_components_wo["fuel"]
             traj_dev_r_wo = reward_components_wo["traj_dev"]
+            prob_dockpos_r_wo = reward_componets_wo["dock_prob_relpos"]
+            dockvel_r_wo = reward_components_wo["dock_relvel"]
             collision_data_wo = env_wo.collision_data()
         else:
             coll_prob_wo = coll_prob
             fuel_cons_wo = fuel_cons
             traj_dev_wo = traj_dev
+            dock_pos_wo = dock_pos
+            dock_vel_wo = dock_vel
             total_reward_wo = total_reward
             reward_components_wo = reward_components
             coll_prob_r_wo = coll_prob_r
             fuel_r_wo = fuel_r
             traj_dev_r_wo = traj_dev_r
+            prob_dock_r_wo = prob_dockpos_r
+            dockvel_r_wo = dockvel_r  
             collision_data_wo = collision_data
 
         # simulation time
@@ -669,26 +729,27 @@ class Simulator:
             print(f"    with maneuvers: {total_reward}.")
 
         # table of significant parameters
+
         print("\nParameters table:")
         columns = ["threshold", "value w/o man", "reward w/o man"]
         if action_table_not_empty:
             columns += ["value with man", "reward with man"]
         index = [
-            "coll prob", "fuel (|dV|)",
+            "coll prob", "fuel (|dV|)", "Docking pos(T/F)", "Docking vel(diff)", 
             "dev a (m)", "dev e", "dev i (rad)",
             "dev W (rad)", "dev w (rad)", "dev M (rad)",
         ]
         df = pd.DataFrame(index=index, columns=columns)
-        df["threshold"] = [coll_prob_thr, fuel_cons_thr] + list(traj_dev_thr)
+        df["threshold"] = [coll_prob_thr, fuel_cons_thr] + list(traj_dev_thr) + [dock_prob_relpos_thr, dock_relvel_thr]
         df["threshold"].fillna(value="not taken", inplace=True)
         df["value w/o man"] = [coll_prob_wo,
-                               fuel_cons_wo] + list(traj_dev_wo)
+                               fuel_cons_wo] + list(traj_dev_wo) + [dock_pos_wo, dock_vel_wo]
         df["reward w/o man"] = [coll_prob_r_wo,
-                                fuel_r_wo] + list(traj_dev_r_wo)
-        if action_table_not_empty:
-            df["value with man"] = [coll_prob, fuel_cons] + list(traj_dev)
+                                fuel_r_wo] + list(traj_dev_r_wo) + [prob_dock_r_wo, dock_vel_r_wo]
+        if action_table_not_empty: 
+            df["value with man"] = [coll_prob, fuel_cons] + list(traj_dev) + [dock_pos, dock_vel]
             df["reward with man"] = [coll_prob_r,
-                                     fuel_r] + list(traj_dev_r)
+                                     fuel_r] + list(traj_dev_r) + [prob_dockpos_r, dockvel_r]
 
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
             print(df)

@@ -35,7 +35,8 @@ def orbital_period_after_actions(action_table, env, step):
         simulator.start_time.mjd2000 + np.sum(action_table[:, 3]) + step,
         "mjd2000"
     )
-    period = env.protected.get_orbital_period()
+    simulator.run(log=False)
+    period = env.servicer.get_orbital_period()
     env.reset()
     return period
 
@@ -55,7 +56,7 @@ def position_after_actions(action_table, env, step, epoch):
     return pos, vel
 
 
-def generate_session(protected, debris, agent, start_time, end_time, step, return_env=False):
+def generate_session(protected, servicer, debris, agent, start_time, end_time, step, return_env=False):
     """Simulation.
 
     Args:
@@ -73,8 +74,8 @@ def generate_session(protected, debris, agent, start_time, end_time, step, retur
     """
     start_time_mjd2000 = pk.epoch(start_time, "mjd2000")
     end_time_mjd2000 = pk.epoch(end_time, "mjd2000")
-    protected_copy, debris_copy = copy(protected), copy(debris)
-    env = Environment(protected_copy, debris_copy,
+    protected_copy, servicer_copy, debris_copy = copy(protected), copy(servicer), copy(debris)
+    env = Environment(protected_copy, servicer_copy, debris_copy,
                       start_time_mjd2000, end_time_mjd2000)
     simulator = Simulator(agent, env, step)
     reward = simulator.run(log=False)
@@ -97,6 +98,8 @@ def constrain_action(action, max_fuel_cons, min_time=None, max_time=None):
         time constrain (max and min time to request)
 
     """
+    
+   
     fuel_cons = fuel_consumption(action[:3])
     if fuel_cons > max_fuel_cons:
         action[:3] *= max_fuel_cons / fuel_cons
@@ -161,6 +164,26 @@ def time_before_first_collision(env, step):
         return collisions[0]['epoch'] - env.get_start_time().mjd2000
     return None
 
+def time_elapsed_to_phase(action_table, env, step):
+    Theta1 = env.servicer.get_orbital_elements()[-1]
+    Theta2 = env.protected.get_orbital_elements()[-1]
+
+    ## make it more dynamic by depending on the exact T2 value instead of the approximation.
+
+    T1 = env.servicer.get_orbital_period()
+    T2 = orbital_period_after_actions(action_table, env, step)
+
+    #T1*(4/5)
+
+    deltaTheta = np.abs(Theta1-Theta2)
+    denominator = (2*np.pi*(T1-T2))
+    
+    if denominator == 0:
+        return 0
+    else:
+        return np.abs(deltaTheta*T1*T2/denominator)
+
+    
 #it computes the max time before which we can do the first cam. put 0, 0.5 and 1 to understand. and make a study. 
 def time_before_early_first_maneuver(env, step, max_n_orbits=0.5):
     time_before_collision = time_before_first_collision(env, step)
