@@ -148,9 +148,9 @@ class CrossEntropy(BaseTableModel):
 
         if first_maneuver_time == "early":
             self.action_table[0] = np.array([0,0,0,0])
-            self.action_table[1] = np.array([0,0,0,(
-                duration - self.time_to_first_maneuver) / n_actions])
-            self.action_table[2] = np.array(
+            #self.action_table[1] = np.array([0,0,0,(
+            #    duration - self.time_to_first_maneuver) / n_actions])
+            self.action_table[-3] = np.array(
                 [0, 0, 0, self.time_to_first_maneuver])
             self.action_table[3:-1, 3] = (
                 duration - self.time_to_first_maneuver) / n_actions
@@ -282,7 +282,7 @@ class CrossEntropy(BaseTableModel):
             if np.count_nonzero(action_table[0, :3]) != 0:
                 raise ValueError("first action must be empty")
             if self.reverse:
-                if action_table.shape[0] != 3:
+                if action_table.shape[0] != 5:
                     raise ValueError(
                         "if reverse -  it has to be only 3 actions")
             self.n_maneuvers = action_table.shape[0]
@@ -307,11 +307,11 @@ class CrossEntropy(BaseTableModel):
         rnd_action_table = np.zeros_like(self.action_table)
         max_fuel = MAX_FUEL_CONSUMPTION
         fuel_consumed = 0
-        #fuel_level = self.fuel_level / (1 + (self.reverse == True))
+        fuel_level = self.fuel_level / (2*(1 + (self.reverse == True)))
         for i in range(self.n_actions_servicer + 1):
             rnd_action_table[i] = np.random.normal(
                 self.action_table[i],self.sigma_table[i])
-            if i != 0:
+            if dV_angle in ["complanar", "collinear"] and i != 0:
                 dV = rnd_action_table[i, :3]
                 action_epoch = pk.epoch(
                     self.env.init_params[
@@ -326,8 +326,11 @@ class CrossEntropy(BaseTableModel):
                 cos_a = np.dot(V, dV) / (norm_V * norm_dV)
                 dV = V * np.sign(cos_a) * norm_dV / norm_V
                 rnd_action_table[i, :3] = dV
+            elif dV_angle != "auto" and i != 0:
+                raise ValueError(f"unknown dV_angle type: {dV_angle}")
+                
             rnd_action_table[i] = constrain_action(
-                rnd_action_table[i], max_fuel)
+                rnd_action_table[i], fuel_level)
             fuel_consumed += fuel_consumption(rnd_action_table[i, :3])
             #fuel_level -= fuel_consumption(rnd_action_table[i, :3])
             max_fuel -= fuel_consumption(rnd_action_table[i, :3])
@@ -356,7 +359,8 @@ class CrossEntropy(BaseTableModel):
                 rnd_action_table[i, :3] = dV
             elif dV_angle != "auto" and i != 0:
                 raise ValueError(f"unknown dV_angle type: {dV_angle}")
-
+            #min_time = pk.epoch(self.env.init_params["start_time"].mjd2000)
+            #max_time = pk.epoch(self.env.init_params["start_time"].mjd2000 + )
             rnd_action_table[i] = constrain_action(
                 rnd_action_table[i], fuel_level)
 
@@ -365,9 +369,10 @@ class CrossEntropy(BaseTableModel):
             max_fuel -= fuel_consumption(rnd_action_table[i, :3])
 
         if self.reverse:
-            time_to_phase = time_elapsed_to_phase(rnd_action_table[:2], self.env, self.step)
-            rnd_action_table[-3, -1] = time_to_phase
-            rnd_action_table[-3, :3] = -rnd_action_table[-4, :3]
+            #time_to_phase = time_elapsed_to_phase(rnd_action_table[:2], self.env, self.step)
+            #rnd_action_table[-3, -1] = np.random.normal(time_to_phase, self.sigma_table[-3,-1])
+            #rnd_action_table[-3, :3] = np.random.normal(-rnd_action_table[-4, :3],self.sigma_table[-4,:3])
+            rnd_action_table[-3, 3] = self.time_to_first_maneuver
             time_to_reverse = orbital_period_after_actions(
                 rnd_action_table[:-1], self.env, self.step)
             rnd_action_table[-2, -1] = time_to_reverse

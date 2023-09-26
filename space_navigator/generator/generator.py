@@ -51,7 +51,7 @@ class Generator:
 
         # protected fuel
         # TODO - add distribution?
-        fuel = 0
+        fuel = 15
 
         # six osculating keplerian elements (a,e,i,W,w,M) at the reference epoch
         # a (semi-major axis): meters
@@ -70,7 +70,7 @@ class Generator:
         M = np.random.uniform(0, 2 * np.pi)
         # Keplerian elements
         elements = [a, e, i, W, w, M]
-
+        self.elements_pro = elements
         # protected object parameters
         params = {
             "epoch": self.start_time,
@@ -110,10 +110,12 @@ class Generator:
 
         
         # Retrieve the Keplerian elements from the protected object
-        a, e, i, W, w, M_protected = self.protected.satellite.osculating_elements(self.start_time)
+        a, e, i, W, w, M_protected = self.elements_pro
+        #self.protected.satellite.osculating_elements(self.start_time)
 
         # Introduce a random phase difference for the servicer by adjusting the mean anomaly
-        phase_difference = np.random.uniform(0, 2 * np.pi)
+        phase_difference = 7*np.pi/180
+        #np.random.uniform(0, 2 * np.pi)
         M_servicer = (M_protected + phase_difference) % (2 * np.pi)  # Ensure it's within [0, 2*pi]
         
         # check if the protected and servicer are close to each other, then run this loop until they are not.
@@ -121,7 +123,7 @@ class Generator:
         while np.isclose(M_servicer, M_protected, atol=1e-8):  # Using a small tolerance to check for equality
             phase_difference = np.random.uniform(0, 2 * np.pi)
             M_servicer = (M_protected + phase_difference) % (2 * np.pi)
-    
+       
         # Keplerian elements for the servicer
         elements = [a, e, i, W, w, M_servicer]
 
@@ -167,8 +169,7 @@ class Generator:
         # TODO - indent?
         
         collision_time = np.random.uniform(
-            self.start_time.mjd2000 , self.end_time.mjd2000
-        )
+            self.start_time.mjd2000, self.end_time.mjd2000)
         #+ self.end_time.mjd2000)/2
         collision_time = pk.epoch(collision_time, "mjd2000")
         self.collision_epochs.append(collision_time)

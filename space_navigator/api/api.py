@@ -27,7 +27,7 @@ class Environment:
     def __init__(self, protected, servicer, debris, start_time, end_time,
                  coll_prob_thr=1e-4, fuel_cons_thr=10,
                  traj_dev_thr=(100, 0.01, 0.01, 0.01, 0.01, None),
-                 dock_prob_relpos_thr = 1, dock_relvel_thr = 1e-1,
+                 dock_prob_relpos_thr = 1000, dock_relvel_thr = 100, 
                  target_osculating_elements = None, is_docked = None):
         """
         Args:
@@ -70,10 +70,13 @@ class Environment:
         self.protected = protected
         self.servicer = servicer
         self.debris = debris
+    
         
         self.protected_r = protected.get_radius()
         self.servicer_r = servicer.get_radius()
         self.init_fuel = servicer.get_fuel()
+        
+        self.dan_debr_wo_man = 1
         
         if target_osculating_elements is None:
             self.init_osculating_elements = np.array(
@@ -120,6 +123,8 @@ class Environment:
             
         self.time_to_dock = []
         
+        self.fuel_to_transfer = []
+        
         self._reward_thr = np.concatenate(
             ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr]
         )).astype(np.float)
@@ -138,9 +143,18 @@ class Environment:
         self._update_all_reward_components(zero_update=True)
         
         # prob of overlap and relvel
-        self.dock_prob_relpos = self.get_dock_prob_relpos()
-        self.dock_relvel = self.get_dock_relvel() 
+        #self.dock_prob_relpos = self.get_dock_prob_relpos()
+        #self.dock_relvel = self.get_dock_relvel() 
        
+        # prob of overlap and relvel
+        self.dock_prob_relpos = []
+        self.dock_relvel = []
+        
+        #action_number = 0
+        self.n_actions_servicer = 2
+        
+        
+        
     def propagate_forward(self, end_time, step=10e-6, each_step_propagation=False):
         """ Forward propagation.
 
@@ -196,21 +210,24 @@ class Environment:
                     debr, dist)
                 self._update_dock_prob_relpos()
                 self._update_dock_relvel()
-            if self.dock_prob_relpos and self.dock_relvel < self.dock_relvel_thr: # is docked
+            #print(self.action_number)
+            if self.dock_prob_relpos < self.dock_prob_relpos_thr and self.dock_relvel < self.dock_relvel_thr: # is docked
                 if not self.time_to_dock:
                     # dont forget to initialize self.is_docked = None --> done
                     self.is_docked = True
                     self.time_to_dock.append(curr_time) # saving all the times, but the first one gives time at which docking happened 
-                
-                    fuel_to_transfer = self.state["fuel"]
-            
-                    ## verify if this is correct, what you meant was to get the fuel of servicer and 
-                    #put the same for protected too if they are docked
-            
-                    self.protected.fuel = fuel_to_transfer
                     epoch_time = pk.epoch(curr_time, "mjd2000")
                     elements_new=self.protected.satellite.osculating_elements(epoch_time)
                     self.servicer.update_osculating_elements(elements_new,epoch_time)
+                    
+            #if self.action_number > self.n_actions_servicer and self.fuel_to_transfer is None:
+                    #self.fuel_to_transfer = self.state["fuel"]
+                    print(0)
+                    ## verify if this is correct, what you meant was to get the fuel of servicer and 
+                    #put the same for protected too if they are docked
+            
+                    #self.protected.fuel = self.fuel_to_transfer
+                    
             
                      #now both servicer and protected will have same elements and same fuel. 
                      #for starters just move protected after docking. 
@@ -352,36 +369,47 @@ class Environment:
         # Get the position of the servicer and protected satellite at the current epoch
         servicer_pos, _ = self.servicer.position(self.state["epoch"])
         protected_pos, _ = self.protected.position(self.state["epoch"])
-
+        rel_vec = np.array(servicer_pos) - np.array(protected_pos)
         # Compute the Euclidean distance between the two positions
-        distance = np.linalg.norm(np.array(servicer_pos) - np.array(protected_pos))
+        distance = np.linalg.norm(rel_vec)
 
         # Check if the distance is less than the sum of their radii
         r_s = self.servicer.get_safe_radius()
         r_p = self.protected.get_safe_radius()
         overlap = distance < (r_s + r_p)
-        #print(int(overlap))
-        self.dock_prob_relpos=int(overlap)
-        
+        #print(int(overlap)) # its previou output 
+        self.dock_prob_relpos = distance
+        #print(distance)
         
     def _update_dock_relvel(self):
         # Get the velocity of both the servicer and the protected object.
-        servicer_pos, servicer_vel = self.servicer.position(self.state["epoch"])
-        protected_pos, protected_vel = self.protected.position(self.state["epoch"])
-
-        # Subtract the velocities to get the relative velocity.
-        rel_vel = [sv - pv for sv, pv in zip(servicer_vel, protected_vel)]
-
-        # Calculate the magnitude of the relative velocity.
-        magnitude = sum(v**2 for v in rel_vel)**0.5
-
+        _, servicer_vel = self.servicer.position(self.state["epoch"])
+        _, protected_vel = self.protected.position(self.state["epoch"])
+        rel_vec = np.array(servicer_vel) - np.array(protected_vel)
+        magnitude = np.linalg.norm(rel_vec)
+       
         self.dock_relvel = magnitude
-        
-        return magnitude
+        #print(magnitude)
+        #return self.dock_relvel
             
             
     def _update_reward(self):
-        """Update reward and reward components."""
+        
+#         print("Total Collision Probability Shape:")
+#         print(self.get_total_collision_probability().shape)
+    
+#         print("Fuel Consumption:")
+#         print(self.get_fuel_consumption())  # Remove .shape here
+    
+#         print("Trajectory Deviation Shape:")
+#         print(self.get_trajectory_deviation().shape)
+    
+#         print("Dock Probability Relative Position:")
+#         print(self.get_dock_prob_relpos())
+    
+#         print("Dock Relative Velocity:")
+#         print(self.get_dock_relvel())
+    
         values = np.concatenate(
             (
                 [self.get_total_collision_probability()],
@@ -391,7 +419,7 @@ class Environment:
                 [self.get_dock_relvel()]
             )
         ).astype(np.float)
-        reward_arr = reward_func(values, self._reward_thr, self.dangerous_debris_in_current_conjunction)
+        reward_arr = reward_func(values, self._reward_thr, self.dan_debr_wo_man)
         
         coll_prob_r = reward_arr[0]
         fuel_r = reward_arr[1]
@@ -421,7 +449,7 @@ class Environment:
             #update action def below
             ###
             
-    def act(self, action):
+    def act(self, action, action_number):
         """ Change velocity for protected object.
         Args:
             action (np.array([dVx, dVy, dVz, time_to_req])):
@@ -430,16 +458,18 @@ class Environment:
         """
         self.next_action = pk.epoch(
             self.state["epoch"].mjd2000 + float(action[3]), "mjd2000")
-        if not self.is_docked:
+        if action_number < 2:
             error, fuel_cons = self.servicer.maneuver(
             action[:3], self.state["epoch"])
         else:
-            error, fuel_cons = self.servicer.maneuver(
-            action[:3], self.state["epoch"])
+            #error, fuel_cons = self.servicer.maneuver(
+            #action[:3], self.state["epoch"])
             error, fuel_cons = self.protected.maneuver(
             action[:3], self.state["epoch"])
         if not error:
             self.state["fuel"] -= fuel_cons
+        #self.action_number += 1
+        #print(self.action_number)
         return error
 
     def get_total_collision_probability(self):

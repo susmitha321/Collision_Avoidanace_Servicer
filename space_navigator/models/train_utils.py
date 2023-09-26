@@ -36,7 +36,7 @@ def orbital_period_after_actions(action_table, env, step):
         "mjd2000"
     )
     simulator.run(log=False)
-    period = env.servicer.get_orbital_period()
+    period = env.protected.get_orbital_period()
     env.reset()
     return period
 
@@ -172,17 +172,20 @@ def time_elapsed_to_phase(action_table, env, step):
 
     T1 = env.servicer.get_orbital_period()
     T2 = orbital_period_after_actions(action_table, env, step)
-
+    #T1_sec = 
+    #T2_sec = 
     #T1*(4/5)
 
     deltaTheta = np.abs(Theta1-Theta2)
     denominator = (2*np.pi*(T1-T2))
     
     if denominator == 0:
-        return 0
+        T_elapsed = 0
     else:
-        return np.abs(deltaTheta*T1*T2/denominator)
-
+        T_elapsed = np.abs(deltaTheta*T1*T2/denominator)
+    
+    T_elapsed = T1/2
+    return T_elapsed
     
 #it computes the max time before which we can do the first cam. put 0, 0.5 and 1 to understand. and make a study. 
 def time_before_early_first_maneuver(env, step, max_n_orbits=0.5):

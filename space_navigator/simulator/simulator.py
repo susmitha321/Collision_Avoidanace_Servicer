@@ -99,7 +99,7 @@ class Visualizer:
         self.subplot_f = self.fig.add_subplot(self.gs[4:7, 1])
         self.subplot_r_t = self.fig.add_subplot(self.gs[8:11, 1])
         self.subplot_d_p = self.fig.add_subplot(self.gs[12:15,1])
-        self.subplot_d_c = self.fig.add_subplot(self.gs[16:19,1])
+        self.subplot_d_v = self.fig.add_subplot(self.gs[16:19,1])
         self.subplot_r = self.fig.add_subplot(self.gs[21:, 1])
         # initialize data for plots
         self.time_arr = [0]
@@ -152,6 +152,8 @@ class Visualizer:
         self.subplot_p.cla()
         self.subplot_f.cla()
         self.subplot_r_t.cla()
+        self.subplot_d_p.cla()
+        self.subplot_d_v.cla()
         self.subplot_r.cla()
 
     def plot_iteration(self, epoch):
@@ -159,9 +161,6 @@ class Visualizer:
         r_coll_prob = self.reward_components["coll_prob"]
         r_fuel = self.reward_components["fuel"]
         r_traj_dev = sum(self.reward_components["traj_dev"])
-        r_prob_dockpos = sum(self.reward_components["dock_prob_relpos"])
-        r_dockvel = sum(self.reward_components["dock_relvel"])
-        
         s = f"""Epoch: {epoch}\n
 Collision Probability: {self.prob_arr[-1]:.5}.
 Fuel Consumption: {self.fuel_cons_arr[-1]:.5} (|dV|).
@@ -172,14 +171,12 @@ Trajectory Deviation:
     W: {self.traj_dev[3]:.5} (rad);
     w: {self.traj_dev[4]:.5} (rad);
     M: {self.traj_dev[5]:.5} (rad).
-Docking probability position: {self.dock_pos_arr[-1]:.5}.
-Docking relvel: {self.dock_vel_arr[-1]:.5}.
+
 Reward Components:
     R Collision Probability: {r_coll_prob:.5};
     R Fuel Consumption: {r_fuel:.5};
-    R Trajectory Deviation: {r_traj_dev:.5};
-    R Docking in position: {r_prob_dockpos:.5};
-    R Dcoking in velocity: {r_dockvel:.5}.
+    R Trajectory Deviation: {r_traj_dev:.5}.
+
 Total Reward: {self.reward_arr[-1]:.5}.
 """
         if self.curr_alert_info:
@@ -204,10 +201,10 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total fuel consumption', ylabel='fuel (dV)')
         self.make_step_on_graph(self.subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
-        self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
-                                title = 'R Docking position', ylabel='dock position')
-        self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
-                                title = 'R Docking velocity', ylabel='dock_velocity')
+        #self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
+        #                       title = 'R Docking position', ylabel='dock position')
+        #self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
+        #                        title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(self.subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time (mjd2000)')
         
@@ -251,10 +248,10 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total fuel consumption', ylabel='fuel (dV)')
         self.make_step_on_graph(subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
-        self.make_step_on_graph(subplot_d_p, self.time_arr, self.dock_pos_arr,
-                                title = 'R Docking position', ylabel='dock position')
-        self.make_step_on_graph(subplot_d_v, self.time_arr, self.dock_vel_arr,
-                                title = 'R Docking velocity', ylabel='dock_velocity')
+        #self.make_step_on_graph(subplot_d_p, self.time_arr, self.dock_pos_arr,
+                                #title = 'R Docking position', ylabel='dock position')
+        #self.make_step_on_graph(subplot_d_v, self.time_arr, self.dock_vel_arr,
+                                #title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time since simulation starts (mjd2000)')
 
@@ -334,7 +331,7 @@ class Simulator:
             simulator_wo_man.run(visualize=False, log=False, each_step_propagation=False,
                                  print_out=False, json_log=False, n_orbits_alert=None)
             collision_data_wo_man = env_temp.collision_data()
-
+            self.env.dan_debr_wo_man = collision_data_wo_man
             # collision data with maneuvers
             env_temp.reset()
             agent = self.agent.copy()
@@ -406,7 +403,7 @@ class Simulator:
         if print_out:
             self.print_start()
             simulation_start_time = time.time()
-
+        k = 0
         while True:
             self.env.propagate_forward(
                 self.curr_time.mjd2000, self.step, each_step_propagation)
@@ -415,8 +412,11 @@ class Simulator:
                 s = self.env.get_state()
                 action = self.agent.get_action(s)
                 # TODO: assert: no actions without alert
-                err = self.env.act(action)
-
+                err = self.env.act(action,k)
+                #self.env.action_number += 1
+                
+                k += 1
+                print(k)
                 if log:
                     r = self.env.get_reward()
                     if err:
@@ -628,8 +628,8 @@ class Simulator:
         coll_prob_thr = self.env.coll_prob_thr
         fuel_cons_thr = self.env.fuel_cons_thr
         traj_dev_thr = self.env.traj_dev_thr
-        dock_prob_relpos_thr = self.dock_prob_relpos_thr
-        dock_relvel_thr = self.dock_relvel_thr
+        dock_prob_relpos_thr = self.env.dock_prob_relpos_thr
+        dock_relvel_thr = self.env.dock_relvel_thr
         action_table = self.agent.action_table
         action_table_not_empty = not is_action_table_empty(action_table)
         crit_distance = self.env.crit_distance
@@ -667,8 +667,8 @@ class Simulator:
             coll_prob_r_wo = reward_components_wo["coll_prob"]
             fuel_r_wo = reward_components_wo["fuel"]
             traj_dev_r_wo = reward_components_wo["traj_dev"]
-            prob_dockpos_r_wo = reward_componets_wo["dock_prob_relpos"]
-            dockvel_r_wo = reward_components_wo["dock_relvel"]
+            prob_dockpos_r_wo = reward_components_wo["dock_prob_relpos"]
+            dock_vel_r_wo = reward_components_wo["dock_relvel"]
             collision_data_wo = env_wo.collision_data()
         else:
             coll_prob_wo = coll_prob
@@ -681,8 +681,8 @@ class Simulator:
             coll_prob_r_wo = coll_prob_r
             fuel_r_wo = fuel_r
             traj_dev_r_wo = traj_dev_r
-            prob_dock_r_wo = prob_dockpos_r
-            dockvel_r_wo = dockvel_r  
+            prob_dockpos_r_wo = prob_dockpos_r
+            dock_vel_r_wo = dockvel_r  
             collision_data_wo = collision_data
 
         # simulation time
@@ -745,7 +745,7 @@ class Simulator:
         df["value w/o man"] = [coll_prob_wo,
                                fuel_cons_wo] + list(traj_dev_wo) + [dock_pos_wo, dock_vel_wo]
         df["reward w/o man"] = [coll_prob_r_wo,
-                                fuel_r_wo] + list(traj_dev_r_wo) + [prob_dock_r_wo, dock_vel_r_wo]
+                                fuel_r_wo] + list(traj_dev_r_wo) + [prob_dockpos_r_wo, dock_vel_r_wo]
         if action_table_not_empty: 
             df["value with man"] = [coll_prob, fuel_cons] + list(traj_dev) + [dock_pos, dock_vel]
             df["reward with man"] = [coll_prob_r,

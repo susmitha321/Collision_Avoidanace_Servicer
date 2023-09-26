@@ -12,6 +12,12 @@ PROPAGATION_STEP = 0.000001
 def main(args):
     parser = argparse.ArgumentParser()
 
+    
+     # input parameteres
+    parser.add_argument("-old-path", "--old_action_table", type=str,
+                        default="training/agents_tables/CE/action_table_CE_for_generated_collision_serv1_new.csv",
+                        required=False)
+    
     # train parameters
     parser.add_argument("-n_m", "--n_maneuvers", type=int,
                         default=2, required=False)
@@ -79,13 +85,14 @@ def main(args):
     save_action_table_path = args.save_action_table_path
     print_out = args.print_out.lower() == "true"
     show_progress = args.show_progress.lower() == "true"
-
+    model_path = args.old_action_table
     # create environment
     env = read_environment(env_path)
 
     # CE
     model = CrossEntropy(env, step, reverse, first_maneuver_time,
                          n_maneuvers, learning_rate, percentile)
+    model.set_action_table_from_path(model_path)
     iteration_kwargs = {
         "n_sessions": n_sessions,
         "sigma_decay": sigma_decay,

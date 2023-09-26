@@ -30,7 +30,7 @@ def main(args):
 
     # simulator run args
     parser.add_argument("-v", "--visualize", type=str,
-                        default="True", required=False)
+                        default="False", required=False)
     parser.add_argument("-n_v", "--n_steps_vis", type=int,
                         default=1000, required=False)
     parser.add_argument("-log", "--logging", type=str,

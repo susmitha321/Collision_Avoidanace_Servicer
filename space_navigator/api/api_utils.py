@@ -105,7 +105,7 @@ def reward_func_0(value, thr, r_thr=-1,
     # add very high reward if its docked but its not necessary.
     ###
 
-def reward_func(values, thr, dangerous_debris, reward_func=reward_func_0, *args, **kwargs):
+def reward_func(values, thr, dangerous_debris = [], reward_func=reward_func_0, *args, **kwargs):
     """Returns reward values for np.array input.
 
     Args:
@@ -142,27 +142,27 @@ def reward_func(values, thr, dangerous_debris, reward_func=reward_func_0, *args,
     
     if dangerous_debris:
         # Reward logic for docking
-        if dock_prob_relpos == 1:  # If docked
+        if dock_prob_relpos < thr[-2]:  # If docked
             reward[-2] = 0
         else:  # If not docked
-            reward[-2] = -1000
+            reward[-2] = -values[-2]/thr[-2]
         
-        # Reward logic for docking relative velocity
+    # Reward logic for docking relative velocity
         if dock_relvel < thr[-1]:  # If velocity is below threshold
             reward[-1] = 0
         else:  # If velocity is above threshold
-            reward[-1] = -1000
+            reward[-1] = -values[-1]/thr[-1]
 
     else:  # If there are no dangerous objects in the conjunction
         # Reward logic for docking
-        if dock_prob_relpos == 1:  # If docked
-            reward[-2] = -1000
+        if dock_prob_relpos < thr[-2]:  # If docked
+            reward[-2] = -values[-2]/thr[-2]
         else:  # If not docked
             reward[-2] = 0
         
         # Reward logic for docking relative velocity
         if dock_relvel < thr[-1]:  # If velocity is below threshold
-            reward[-1] = -1000
+            reward[-1] = -values[-1]/thr[-1]
         else:  # If velocity is above threshold
             reward[-1] = 0
     
