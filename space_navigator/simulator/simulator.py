@@ -735,9 +735,9 @@ class Simulator:
         if action_table_not_empty:
             columns += ["value with man", "reward with man"]
         index = [
-            "coll prob", "fuel (|dV|)", "Docking pos(T/F)", "Docking vel(diff)", 
+            "coll prob", "fuel (|dV|)", 
             "dev a (m)", "dev e", "dev i (rad)",
-            "dev W (rad)", "dev w (rad)", "dev M (rad)",
+            "dev W (rad)", "dev w (rad)", "dev M (rad)","Docking pos(diff)", "Docking vel(diff)"
         ]
         df = pd.DataFrame(index=index, columns=columns)
         df["threshold"] = [coll_prob_thr, fuel_cons_thr] + list(traj_dev_thr) + [dock_prob_relpos_thr, dock_relvel_thr]

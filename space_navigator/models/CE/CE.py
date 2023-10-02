@@ -154,7 +154,7 @@ class CrossEntropy(BaseTableModel):
                 [0, 0, 0, self.time_to_first_maneuver])
             self.action_table[3:-1, 3] = (
                 duration - self.time_to_first_maneuver) / n_actions
-            self.sigma_table[0, 3] = 0
+            #self.sigma_table[0, 3] = 0
 
         self.lr = lr
         self.percentile = percentile
@@ -284,7 +284,7 @@ class CrossEntropy(BaseTableModel):
             if self.reverse:
                 if action_table.shape[0] != 5:
                     raise ValueError(
-                        "if reverse -  it has to be only 3 actions")
+                        "if reverse -  it has to be only 6 actions")
             self.n_maneuvers = action_table.shape[0]
             self.action_table = np.copy(action_table)
             self.policy_reward = self.get_reward()
@@ -311,7 +311,8 @@ class CrossEntropy(BaseTableModel):
         for i in range(self.n_actions_servicer + 1):
             rnd_action_table[i] = np.random.normal(
                 self.action_table[i],self.sigma_table[i])
-            if dV_angle in ["complanar", "collinear"] and i != 0:
+            if  i != 0:
+                #dV_angle in ["complanar", "collinear"] and
                 dV = rnd_action_table[i, :3]
                 action_epoch = pk.epoch(
                     self.env.init_params[
@@ -338,7 +339,8 @@ class CrossEntropy(BaseTableModel):
         for i in range(self.n_actions_servicer + 1, self.action_table.shape[0] - (self.reverse == True)):
             rnd_action_table[i] = np.random.normal(
                 self.action_table[i], self.sigma_table[i])
-            if dV_angle in ["complanar", "collinear"] and i != 0:
+            #if dV_angle in ["complanar", "collinear"] and i != 0:
+            if i != 0:
                 dV = rnd_action_table[i, :3]
                 action_epoch = pk.epoch(
                     self.env.init_params[
@@ -369,10 +371,11 @@ class CrossEntropy(BaseTableModel):
             max_fuel -= fuel_consumption(rnd_action_table[i, :3])
 
         if self.reverse:
-            #time_to_phase = time_elapsed_to_phase(rnd_action_table[:2], self.env, self.step)
-            #rnd_action_table[-3, -1] = np.random.normal(time_to_phase, self.sigma_table[-3,-1])
-            #rnd_action_table[-3, :3] = np.random.normal(-rnd_action_table[-4, :3],self.sigma_table[-4,:3])
-            rnd_action_table[-3, 3] = self.time_to_first_maneuver
+            time_to_phase = time_elapsed_to_phase(rnd_action_table[:2], self.env, self.step)
+            rnd_action_table[-3, -1] = np.random.normal(time_to_phase, self.sigma_table[-3,-1])
+            rnd_action_table[-3, :3] = np.random.normal(-rnd_action_table[-4, :3],self.sigma_table[-4,:3])
+            rnd_action_table[-3, 3] = self.time_to_first_maneuver - rnd_action_table[-4, 3] 
+            #- rnd_action_table[-5, 3]
             time_to_reverse = orbital_period_after_actions(
                 rnd_action_table[:-1], self.env, self.step)
             rnd_action_table[-2, -1] = time_to_reverse

@@ -51,7 +51,7 @@ def position_after_actions(action_table, env, step, epoch):
         "mjd2000"
     )
     simulator.run(log=False)
-    pos, vel = env.protected.position(epoch)
+    pos, vel = env.servicer.position(epoch)
     env.reset()
     return pos, vel
 
@@ -193,6 +193,7 @@ def time_before_early_first_maneuver(env, step, max_n_orbits=0.5):
     if time_before_collision is None:
         return None
     orbital_period = env.protected.get_orbital_period()
+    print(f'orbital period before collision is {orbital_period}')
     max_time_before_collision = max_n_orbits * orbital_period
     time_indent = time_before_collision - max_time_before_collision
     if max_n_orbits <= 0.5:
@@ -201,7 +202,7 @@ def time_before_early_first_maneuver(env, step, max_n_orbits=0.5):
     if time_indent <= 0:
         return before_half_orbit % orbital_period if before_half_orbit > 0 else 0
     return before_half_orbit - int(max_n_orbits - 0.5) * orbital_period
-
+    
 
 def projection(plane, vector):
     A = plane

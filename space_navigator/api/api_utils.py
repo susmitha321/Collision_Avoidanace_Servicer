@@ -142,6 +142,7 @@ def reward_func(values, thr, dangerous_debris = [], reward_func=reward_func_0, *
     
     if dangerous_debris:
         # Reward logic for docking
+        
         if dock_prob_relpos < thr[-2]:  # If docked
             reward[-2] = 0
         else:  # If not docked

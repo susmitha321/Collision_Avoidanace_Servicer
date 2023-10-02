@@ -27,7 +27,7 @@ class Environment:
     def __init__(self, protected, servicer, debris, start_time, end_time,
                  coll_prob_thr=1e-4, fuel_cons_thr=10,
                  traj_dev_thr=(100, 0.01, 0.01, 0.01, 0.01, None),
-                 dock_prob_relpos_thr = 1000, dock_relvel_thr = 100, 
+                 dock_prob_relpos_thr = 500, dock_relvel_thr = 5, dock_action_thr = 5, 
                  target_osculating_elements = None, is_docked = None):
         """
         Args:
@@ -63,7 +63,7 @@ class Environment:
             protected=copy(protected), servicer = copy(servicer), debris=copy(debris), start_time=start_time,
             end_time=end_time, coll_prob_thr=coll_prob_thr, fuel_cons_thr=fuel_cons_thr,
             traj_dev_thr=traj_dev_thr, dock_prob_relpos_thr = dock_prob_relpos_thr, 
-            dock_relvel_thr = dock_relvel_thr, 
+            dock_relvel_thr = dock_relvel_thr, dock_action_thr = dock_action_thr, 
             target_osculating_elements=target_osculating_elements,
         )
 
@@ -111,10 +111,12 @@ class Environment:
         self.fuel_cons_thr = fuel_cons_thr
         self.traj_dev_thr = traj_dev_thr
         
+        
         # threshold for docking between servicer and protected
         
         self.dock_prob_relpos_thr = dock_prob_relpos_thr
         self.dock_relvel_thr = dock_relvel_thr
+        self.dock_action_thr = dock_action_thr
         
         #docking initialization
         
@@ -126,7 +128,7 @@ class Environment:
         self.fuel_to_transfer = []
         
         self._reward_thr = np.concatenate(
-            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr]
+            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr], [dock_action_thr]
         )).astype(np.float)
 
         self.reward_components = None
@@ -149,10 +151,11 @@ class Environment:
         # prob of overlap and relvel
         self.dock_prob_relpos = []
         self.dock_relvel = []
+        self.dock_action = 0
         
         #action_number = 0
         self.n_actions_servicer = 2
-        
+        self.action_number = 0
         
         
     def propagate_forward(self, end_time, step=10e-6, each_step_propagation=False):
@@ -210,7 +213,7 @@ class Environment:
                     debr, dist)
                 self._update_dock_prob_relpos()
                 self._update_dock_relvel()
-            #print(self.action_number)
+            
             if self.dock_prob_relpos < self.dock_prob_relpos_thr and self.dock_relvel < self.dock_relvel_thr: # is docked
                 if not self.time_to_dock:
                     # dont forget to initialize self.is_docked = None --> done
@@ -219,10 +222,13 @@ class Environment:
                     epoch_time = pk.epoch(curr_time, "mjd2000")
                     elements_new=self.protected.satellite.osculating_elements(epoch_time)
                     self.servicer.update_osculating_elements(elements_new,epoch_time)
+                    print(f'docking occured at {epoch_time} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
+                    self.dock_action = self.action_number
                     
+               
             #if self.action_number > self.n_actions_servicer and self.fuel_to_transfer is None:
                     #self.fuel_to_transfer = self.state["fuel"]
-                    print(0)
+                    
                     ## verify if this is correct, what you meant was to get the fuel of servicer and 
                     #put the same for protected too if they are docked
             
@@ -392,7 +398,9 @@ class Environment:
         #print(magnitude)
         #return self.dock_relvel
             
-            
+    def _update_action_number(self,action_number) 
+        self.action_number = action_number
+        
     def _update_reward(self):
         
 #         print("Total Collision Probability Shape:")
@@ -416,7 +424,8 @@ class Environment:
                 [self.get_fuel_consumption()],
                 np.abs(self.get_trajectory_deviation()),
                 [self.get_dock_prob_relpos()],
-                [self.get_dock_relvel()]
+                [self.get_dock_relvel(),
+                 self.get_dock_action()]
             )
         ).astype(np.float)
         reward_arr = reward_func(values, self._reward_thr, self.dan_debr_wo_man)
@@ -426,11 +435,12 @@ class Environment:
         traj_dev_r = reward_arr[2:8]
         dock_prob_relpos_r = reward_arr[8]
         dock_relvel_r = reward_arr[9]
-        
+        dock_action_r = reward_arr[10]
         # reward components
         self.reward_components = {
             "coll_prob": coll_prob_r, "fuel": fuel_r, "traj_dev": tuple(traj_dev_r), 
-            "dock_prob_relpos": dock_prob_relpos_r, "dock_relvel": dock_relvel_r
+            "dock_prob_relpos": dock_prob_relpos_r, "dock_relvel": dock_relvel_r, 
+            "dock_action_number":dock_action_r
         }
         # total reward
         self.reward = np.sum(reward_arr)
@@ -456,14 +466,18 @@ class Environment:
                 vector of velocity deltas for protected object (m/s),
                 step in time when to request the next action (mjd2000).
         """
+        self._update_action_number(self, action_number)
         self.next_action = pk.epoch(
             self.state["epoch"].mjd2000 + float(action[3]), "mjd2000")
+        print(f'doccking situation {self.is_docked}')
         if action_number < 2:
+            print(f'servicer is acting at {action_number} and {action[:3]}')
             error, fuel_cons = self.servicer.maneuver(
             action[:3], self.state["epoch"])
         else:
             #error, fuel_cons = self.servicer.maneuver(
             #action[:3], self.state["epoch"])
+            print(f'protected is acting at {action_number} and {action[:3]}')
             error, fuel_cons = self.protected.maneuver(
             action[:3], self.state["epoch"])
         if not error:
@@ -477,7 +491,13 @@ class Environment:
 
     def get_trajectory_deviation(self):
         return self.trajectory_deviation
-
+    
+    def get_action_number(self):
+        return self.action_number
+    
+    def get_dock_action(self)
+        return self.dock_action
+    
     def get_reward_components(self):
         """Provides reward components.
 
