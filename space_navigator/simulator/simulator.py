@@ -199,12 +199,14 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total collision probability', ylabel='prob')
         self.make_step_on_graph(self.subplot_f, self.time_arr, self.fuel_cons_arr,
                                 title='Total fuel consumption', ylabel='fuel (dV)')
+        print(f'time and dock pos printing {self.time_arr},{self.r_traj_dev_arr}')
         self.make_step_on_graph(self.subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
-        #self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
-        #                       title = 'R Docking position', ylabel='dock position')
-        #self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
-        #                        title = 'R Docking velocity', ylabel='dock_velocity')
+        print(f'time and dock pos printing {self.time_arr},{self.dock_pos_arr}')
+        self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
+                               title = 'R Docking position', ylabel='dock position')
+        self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
+                                title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(self.subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time (mjd2000)')
         
@@ -248,10 +250,10 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total fuel consumption', ylabel='fuel (dV)')
         self.make_step_on_graph(subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
-        #self.make_step_on_graph(subplot_d_p, self.time_arr, self.dock_pos_arr,
-                                #title = 'R Docking position', ylabel='dock position')
-        #self.make_step_on_graph(subplot_d_v, self.time_arr, self.dock_vel_arr,
-                                #title = 'R Docking velocity', ylabel='dock_velocity')
+        self.make_step_on_graph(subplot_d_p, self.time_arr, self.dock_pos_arr,
+                                title = 'R Docking position', ylabel='dock position')
+        self.make_step_on_graph(subplot_d_v, self.time_arr, self.dock_vel_arr,
+                                title = 'R Docking velocity', ylabel='dock_velocity')
         self.make_step_on_graph(subplot_r, self.time_arr, self.reward_arr,
                                 title='Total reward', ylabel='reward', xlabel='time since simulation starts (mjd2000)')
 

@@ -172,10 +172,7 @@ def time_elapsed_to_phase(action_table, env, step):
 
     T1 = env.servicer.get_orbital_period()
     T2 = orbital_period_after_actions(action_table, env, step)
-    #T1_sec = 
-    #T2_sec = 
-    #T1*(4/5)
-
+    
     deltaTheta = np.abs(Theta1-Theta2)
     denominator = (2*np.pi*(T1-T2))
     
@@ -184,7 +181,7 @@ def time_elapsed_to_phase(action_table, env, step):
     else:
         T_elapsed = np.abs(deltaTheta*T1*T2/denominator)
     
-    T_elapsed = T1/2
+    T_elapsed = T1
     return T_elapsed
     
 #it computes the max time before which we can do the first cam. put 0, 0.5 and 1 to understand. and make a study. 

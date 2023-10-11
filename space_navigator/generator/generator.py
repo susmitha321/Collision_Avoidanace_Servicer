@@ -6,6 +6,8 @@ import numpy as np
 import pykep as pk
 import time
 
+import copy
+
 from .generator_utils import SpaceObject2srt, rotate_velocity
 from ..api import SpaceObject
 
@@ -85,6 +87,19 @@ class Generator:
         self.protected = SpaceObject("PROTECTED", "osc", params)
         print(self.protected.satellite.osculating_elements(params["epoch"]))
         #print(dir(self.protected.satellite.osculating_elements))
+    
+#     def add_dummy(self):
+#         # Use deepcopy to create an exact copy of the protected object
+#         dummy_protected = copy.deepcopy(self.protected)
+
+#         # Assign the name "dummy" to the copied object
+#         dummy_protected.name = "dummy"
+
+#         # Optionally, you can modify any other attributes of the dummy object if needed
+#         # For example, if you want to change the fuel of the dummy object:
+#         # dummy_protected.fuel = new_fuel_value
+#         print(self.dummy.satellite.osculating_elements(params["epoch"]))
+#         return dummy_protected
     
     def add_servicer(self):
         """Add Servicer object."""
@@ -226,6 +241,9 @@ class Generator:
             if self.servicer:  # Save servicer details if it exists
                 #f.write('osc\n')
                 f.write(SpaceObject2srt(self.servicer, self.start_time))
+#             if self.dummy:  # Save servicer details if it exists
+#                 #f.write('osc\n')
+#                 f.write(SpaceObject2srt(self.dummy, self.start_time))
             for debr, epoch in zip(self.debris, self.collision_epochs):
                 f.write(SpaceObject2srt(debr, epoch))
 

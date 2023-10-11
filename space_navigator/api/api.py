@@ -18,7 +18,7 @@ from .api_utils import (
 )
 from ..collision import CollProbEstimator
 
-MAX_FUEL_CONSUMPTION = 15
+MAX_FUEL_CONSUMPTION = 500
 
 
 class Environment:
@@ -33,6 +33,7 @@ class Environment:
         Args:
             protected (SpaceObject): protected space object in Environment.
             servicer (SpaceObject): servicer to dock with protected and perform cam
+            dummy (SpaceObject): to perfom docking for servicer
             debris ([SpaceObject, ]): list of other space objects.
             start_time (pk.epoch): initial time of the environment.
             end_time (pk.epoch): end time of the environment.
@@ -69,11 +70,13 @@ class Environment:
 
         self.protected = protected
         self.servicer = servicer
+        self.dummy = copy(self.protected)
         self.debris = debris
-    
+        
         
         self.protected_r = protected.get_radius()
         self.servicer_r = servicer.get_radius()
+        self.dummy_r = self.protected_r
         self.init_fuel = servicer.get_fuel()
         
         self.dan_debr_wo_man = 1
@@ -128,7 +131,7 @@ class Environment:
         self.fuel_to_transfer = []
         
         self._reward_thr = np.concatenate(
-            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr], [dock_action_thr]
+            ([coll_prob_thr], [fuel_cons_thr], traj_dev_thr, [dock_prob_relpos_thr], [dock_relvel_thr]
         )).astype(np.float)
 
         self.reward_components = None
@@ -169,7 +172,7 @@ class Environment:
                 or skip the steps using a lower estimation of the time to conjunction.
 
         Raises:
-            ValueError: if end_time is less then current time of the environment.
+            ValueError: if end_time is less than current time of the environment.
             Exception: if step in propagation_grid is less then step.
 
         """
@@ -196,6 +199,7 @@ class Environment:
 
         s = 0
         while s < n_time_steps_plus_one:
+            #print(f'the propagation is for {n_time_steps_plus_one}')
             t = propagation_grid[s]
             epoch = pk.epoch(t, "mjd2000")
             st, servicer, debr = self.coords_by_epoch(epoch)
@@ -211,36 +215,26 @@ class Environment:
             if time_to_collision_is_finite:
                 self._update_distances_and_probabilities_prior_to_current_conjunction(
                     debr, dist)
-                self._update_dock_prob_relpos()
-                self._update_dock_relvel()
+            self._update_dock_prob_relpos()
+            self._update_dock_relvel()
             
-            if self.dock_prob_relpos < self.dock_prob_relpos_thr and self.dock_relvel < self.dock_relvel_thr: # is docked
+            if self.dock_prob_relpos < self.dock_prob_relpos_thr: 
+            #and self.dock_relvel < self.dock_relvel_thr: # is docked
                 if not self.time_to_dock:
                     # dont forget to initialize self.is_docked = None --> done
                     self.is_docked = True
-                    self.time_to_dock.append(curr_time) # saving all the times, but the first one gives time at which docking happened 
-                    epoch_time = pk.epoch(curr_time, "mjd2000")
-                    elements_new=self.protected.satellite.osculating_elements(epoch_time)
-                    self.servicer.update_osculating_elements(elements_new,epoch_time)
-                    print(f'docking occured at {epoch_time} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
+                    self.time_to_dock.append(epoch) # saving all the times, but the first one gives time at which docking happened 
+                    epoch_time = epoch
+                    #pk.epoch(curr_time, "mjd2000")
+                    print(f'position of servicer is {self.servicer.satellite.eph(epoch)}')
+                    print(f'position of dummy is {self.dummy.satellite.eph(epoch)}')
+                    elements_new=self.dummy.satellite.osculating_elements(epoch_time)
+                    self.servicer.update_osculating_elements(elements_new, epoch_time)
+                    print(f'docking occured at {epoch} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
+                    
                     self.dock_action = self.action_number
-                    
+                    print(f'dock action number {self.dock_action}')
                
-            #if self.action_number > self.n_actions_servicer and self.fuel_to_transfer is None:
-                    #self.fuel_to_transfer = self.state["fuel"]
-                    
-                    ## verify if this is correct, what you meant was to get the fuel of servicer and 
-                    #put the same for protected too if they are docked
-            
-                    #self.protected.fuel = self.fuel_to_transfer
-                    
-            
-                     #now both servicer and protected will have same elements and same fuel. 
-                     #for starters just move protected after docking. 
-                     # i am assuming that its like transfer of fuel from servicer to protected, 
-                     # we can make it complex by adding undocking and coming back later. 
-            
-                     # calculation of the number of steps forward
             if each_step_propagation:
                 s += 1
             else:
@@ -374,31 +368,31 @@ class Environment:
     def _update_dock_prob_relpos(self):
         # Get the position of the servicer and protected satellite at the current epoch
         servicer_pos, _ = self.servicer.position(self.state["epoch"])
-        protected_pos, _ = self.protected.position(self.state["epoch"])
+        protected_pos, _ = self.dummy.position(self.state["epoch"])
+        
         rel_vec = np.array(servicer_pos) - np.array(protected_pos)
         # Compute the Euclidean distance between the two positions
         distance = np.linalg.norm(rel_vec)
 
         # Check if the distance is less than the sum of their radii
         r_s = self.servicer.get_safe_radius()
-        r_p = self.protected.get_safe_radius()
-        overlap = distance < (r_s + r_p)
-        #print(int(overlap)) # its previou output 
+        r_d = self.dummy.get_safe_radius()
+        overlap = distance < (r_s + r_d)
+        
         self.dock_prob_relpos = distance
-        #print(distance)
+        
         
     def _update_dock_relvel(self):
         # Get the velocity of both the servicer and the protected object.
         _, servicer_vel = self.servicer.position(self.state["epoch"])
-        _, protected_vel = self.protected.position(self.state["epoch"])
+        _, protected_vel = self.dummy.position(self.state["epoch"])
         rel_vec = np.array(servicer_vel) - np.array(protected_vel)
         magnitude = np.linalg.norm(rel_vec)
        
         self.dock_relvel = magnitude
-        #print(magnitude)
-        #return self.dock_relvel
+       
             
-    def _update_action_number(self,action_number) 
+    def _update_action_number(self,action_number):
         self.action_number = action_number
         
     def _update_reward(self):
@@ -424,8 +418,8 @@ class Environment:
                 [self.get_fuel_consumption()],
                 np.abs(self.get_trajectory_deviation()),
                 [self.get_dock_prob_relpos()],
-                [self.get_dock_relvel(),
-                 self.get_dock_action()]
+                [self.get_dock_relvel()
+                ]
             )
         ).astype(np.float)
         reward_arr = reward_func(values, self._reward_thr, self.dan_debr_wo_man)
@@ -435,12 +429,11 @@ class Environment:
         traj_dev_r = reward_arr[2:8]
         dock_prob_relpos_r = reward_arr[8]
         dock_relvel_r = reward_arr[9]
-        dock_action_r = reward_arr[10]
+        #dock_action_r = reward_arr[10]
         # reward components
         self.reward_components = {
             "coll_prob": coll_prob_r, "fuel": fuel_r, "traj_dev": tuple(traj_dev_r), 
-            "dock_prob_relpos": dock_prob_relpos_r, "dock_relvel": dock_relvel_r, 
-            "dock_action_number":dock_action_r
+            "dock_prob_relpos": dock_prob_relpos_r, "dock_relvel": dock_relvel_r 
         }
         # total reward
         self.reward = np.sum(reward_arr)
@@ -466,20 +459,22 @@ class Environment:
                 vector of velocity deltas for protected object (m/s),
                 step in time when to request the next action (mjd2000).
         """
-        self._update_action_number(self, action_number)
+        self._update_action_number(action_number)
         self.next_action = pk.epoch(
             self.state["epoch"].mjd2000 + float(action[3]), "mjd2000")
         print(f'doccking situation {self.is_docked}')
-        if action_number < 2:
-            print(f'servicer is acting at {action_number} and {action[:3]}')
+        if action_number < 2 and self.is_docked==[]:
+            print(f'servicer is acting at {self.servicer.satellite.eph(self.state["epoch"])},{self.state["epoch"]} and {action[:3]}')
             error, fuel_cons = self.servicer.maneuver(
             action[:3], self.state["epoch"])
+            print(f'fuel level of servicer is {self.servicer.fuel}')
         else:
             #error, fuel_cons = self.servicer.maneuver(
             #action[:3], self.state["epoch"])
-            print(f'protected is acting at {action_number} and {action[:3]}')
+            print(f'protected is acting at {self.action_number},{self.state["epoch"]} and {action[:3]}')
             error, fuel_cons = self.protected.maneuver(
             action[:3], self.state["epoch"])
+            print(f'fuel level of protected is {self.protected.fuel}')
         if not error:
             self.state["fuel"] -= fuel_cons
         #self.action_number += 1
@@ -495,7 +490,7 @@ class Environment:
     def get_action_number(self):
         return self.action_number
     
-    def get_dock_action(self)
+    def get_dock_action(self):
         return self.dock_action
     
     def get_reward_components(self):
@@ -699,6 +694,7 @@ class SpaceObject:
         self.satellite = pk.planet.keplerian(t_man, list(pos), new_vel, mu_central_body,
                                              mu_self, radius, safe_radius, name)
         self.fuel -= fuel_cons
+        print(f'fuel level is {self.fuel}')
         return "", fuel_cons
 
     def position(self, epoch):

@@ -139,6 +139,7 @@ class CrossEntropy(BaseTableModel):
         self.sigma_table = np.vstack((
             np.zeros((1, 4)), sigma_dV * np.ones((self.n_maneuvers, 4))
         ))
+        #self.sigma_table[1:3,:3] = 30
         self.sigma_table[:, 3] = sigma_t
         self.sigma_table[-1, -1] = np.nan
 
@@ -170,7 +171,7 @@ class CrossEntropy(BaseTableModel):
 
     def iteration(self, print_out=False, n_sessions=30,
                   sigma_decay=0.98, lr_decay=0.98, percentile_growth=1.005,
-                  show_progress=False, dV_angle="complanar",
+                  show_progress=False, dV_angle="auto",
                   step_if_low_reward=False, early_stopping=True):
         """Training iteration.
 
@@ -311,7 +312,7 @@ class CrossEntropy(BaseTableModel):
         for i in range(self.n_actions_servicer + 1):
             rnd_action_table[i] = np.random.normal(
                 self.action_table[i],self.sigma_table[i])
-            if  i != 0:
+            if dV_angle in ["complanar", "collinear"] and i != 0:
                 #dV_angle in ["complanar", "collinear"] and
                 dV = rnd_action_table[i, :3]
                 action_epoch = pk.epoch(
@@ -322,11 +323,15 @@ class CrossEntropy(BaseTableModel):
                 pos, V = position_after_actions(
                     rnd_action_table[:i], self.env, self.step, action_epoch)
                 pos, V = np.array(pos), np.array(V)
-                norm_V = np.linalg.norm(V)
-                norm_dV = np.linalg.norm(dV)
-                cos_a = np.dot(V, dV) / (norm_V * norm_dV)
-                dV = V * np.sign(cos_a) * norm_dV / norm_V
-                rnd_action_table[i, :3] = dV
+                if dV_angle == "complanar":
+                    A = np.vstack((pos, V)).T
+                    dV = projection(A, dV)
+                if dV_angle == "collinear":
+                    norm_V = np.linalg.norm(V)
+                    norm_dV = np.linalg.norm(dV)
+                    cos_a = np.dot(V, dV) / (norm_V * norm_dV)
+                    dV = V * np.sign(cos_a) * norm_dV / norm_V
+                    rnd_action_table[i, :3] = dV
             elif dV_angle != "auto" and i != 0:
                 raise ValueError(f"unknown dV_angle type: {dV_angle}")
                 
@@ -339,8 +344,8 @@ class CrossEntropy(BaseTableModel):
         for i in range(self.n_actions_servicer + 1, self.action_table.shape[0] - (self.reverse == True)):
             rnd_action_table[i] = np.random.normal(
                 self.action_table[i], self.sigma_table[i])
-            #if dV_angle in ["complanar", "collinear"] and i != 0:
-            if i != 0:
+            if dV_angle in ["complanar", "collinear"] and i != 0:
+            #if i != 0:
                 dV = rnd_action_table[i, :3]
                 action_epoch = pk.epoch(
                     self.env.init_params[
@@ -373,7 +378,7 @@ class CrossEntropy(BaseTableModel):
         if self.reverse:
             time_to_phase = time_elapsed_to_phase(rnd_action_table[:2], self.env, self.step)
             rnd_action_table[-3, -1] = np.random.normal(time_to_phase, self.sigma_table[-3,-1])
-            rnd_action_table[-3, :3] = np.random.normal(-rnd_action_table[-4, :3],self.sigma_table[-4,:3])
+            #rnd_action_table[-3, :3] = np.random.normal(-rnd_action_table[-4, :3],self.sigma_table[-4,:3])
             rnd_action_table[-3, 3] = self.time_to_first_maneuver - rnd_action_table[-4, 3] 
             #- rnd_action_table[-5, 3]
             time_to_reverse = orbital_period_after_actions(

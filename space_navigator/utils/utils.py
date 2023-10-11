@@ -116,6 +116,7 @@ def read_environment(path):
     
     protected = objects[0]
     servicer  = objects[1]
+    #dummy     = objects[2]
     debris    = objects[2:]
    
     return Environment(protected, servicer, debris, start_time, end_time)

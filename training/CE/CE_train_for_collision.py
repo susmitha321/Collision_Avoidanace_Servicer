@@ -15,7 +15,7 @@ def main(args):
     
      # input parameteres
     parser.add_argument("-old-path", "--old_action_table", type=str,
-                        default="training/agents_tables/CE/action_table_CE_for_generated_collision_serv1_new.csv",
+                        default="training/agents_tables/CE/action_table_CE_for_generated_collision_serv1_with_dummy.csv",
                         required=False)
     
     # train parameters

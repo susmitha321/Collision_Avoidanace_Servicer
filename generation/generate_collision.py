@@ -56,6 +56,9 @@ def main(args):
     #print(self.protected.satellite.osculating_parameters(start_time))
     generator.add_servicer()
     #print(self.servicer.satellite.osculating_parameters(self.start_time))
+#   generator.add_dummy()
+    #print(self.dummy.satellite.osculating_parameters(self.start_time))
+    
     for _ in range(n_debris):
         generator.add_debris(pos_sigma, vel_ratio_sigma, i_threshold)
 
