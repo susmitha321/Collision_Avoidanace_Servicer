@@ -4,6 +4,8 @@ from copy import copy
 from . import BaseAgent
 from .agent_utils import adjust_action_table
 
+#thick lines
+#readable things in plots
 
 class TableAgent(BaseAgent):
 

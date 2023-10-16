@@ -152,8 +152,8 @@ class Environment:
         #self.dock_relvel = self.get_dock_relvel() 
        
         # prob of overlap and relvel
-        self.dock_prob_relpos = []
-        self.dock_relvel = []
+        self.dock_prob_relpos = 0.0
+        self.dock_relvel = 0.0
         self.dock_action = 0
         
         #action_number = 0
@@ -218,22 +218,22 @@ class Environment:
             self._update_dock_prob_relpos()
             self._update_dock_relvel()
             
-            if self.dock_prob_relpos < self.dock_prob_relpos_thr: 
-            #and self.dock_relvel < self.dock_relvel_thr: # is docked
+            if self.dock_prob_relpos < self.dock_prob_relpos_thr and self.dock_relvel < self.dock_relvel_thr: 
+            
                 if not self.time_to_dock:
-                    # dont forget to initialize self.is_docked = None --> done
+                    
                     self.is_docked = True
                     self.time_to_dock.append(epoch) # saving all the times, but the first one gives time at which docking happened 
                     epoch_time = epoch
-                    #pk.epoch(curr_time, "mjd2000")
-                    print(f'position of servicer is {self.servicer.satellite.eph(epoch)}')
-                    print(f'position of dummy is {self.dummy.satellite.eph(epoch)}')
+                    
+                    #print(f'position of servicer is {self.servicer.satellite.eph(epoch)}')
+                    #print(f'position of dummy is {self.dummy.satellite.eph(epoch)}')
                     elements_new=self.dummy.satellite.osculating_elements(epoch_time)
-                    self.servicer.update_osculating_elements(elements_new, epoch_time)
-                    print(f'docking occured at {epoch} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
+                    #self.servicer.update_osculating_elements(elements_new, epoch_time)
+                    #print(f'docking occured at {epoch} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
                     
                     self.dock_action = self.action_number
-                    print(f'dock action number {self.dock_action}')
+                    #print(f'dock action number {self.dock_action}')
                
             if each_step_propagation:
                 s += 1
@@ -244,7 +244,45 @@ class Environment:
                     s += n_steps
                 else:
                     s = n_time_steps_plus_one - 1 if s < n_time_steps_plus_one - 1 else s + 1
-
+                    
+        if self.state["epoch"].mjd2000 != end_time:
+            epoch = pk.epoch(end_time, "mjd2000")
+            st, servicer, debr = self.coords_by_epoch(epoch)
+            coord = dict(st=st, servicer=servicer, debr=debr)
+            self.state = dict(
+                coord=coord, epoch=epoch, fuel=self.servicer.get_fuel()
+            )
+            # dangerous debris, distances
+            # and estimation of time to collision with closest debris
+            debr, dist, time_to_collision = lower_estimate_of_time_to_conjunction(
+                self.state['coord']['st'], self.state['coord']['debr'], self.crit_distance)
+            time_to_collision_is_finite = np.isfinite(time_to_collision)
+            if time_to_collision_is_finite:
+                self._update_distances_and_probabilities_prior_to_current_conjunction(
+                    debr, dist)
+            self._update_dock_prob_relpos()
+            self._update_dock_relvel()
+            
+            if self.dock_prob_relpos < self.dock_prob_relpos_thr and self.dock_relvel < self.dock_relvel_thr: 
+            
+                if not self.time_to_dock:
+                    
+                    self.is_docked = True
+                    self.time_to_dock.append(epoch) # saving all the times, but the first one gives time at which docking happened 
+                    epoch_time = epoch
+                    
+                    #print(f'position of servicer is {self.servicer.satellite.eph(epoch)}')
+                    #print(f'position of dummy is {self.dummy.satellite.eph(epoch)}')
+                    elements_new=self.dummy.satellite.osculating_elements(epoch_time)
+                    self.servicer.update_osculating_elements(elements_new, epoch_time)
+                    #print(f'docking occured at {epoch} and dock pos is {self.dock_prob_relpos}, dock vel is {self.dock_relvel}')
+                    
+                    self.dock_action = self.action_number
+                    #print(f'dock action number {self.dock_action}')
+        
+        #if self.state["epoch"].mjd2000 != end_time:
+         #   print('do the whole thing')
+            
         self._update_all_reward_components()
 
     def _update_distances_and_probabilities_prior_to_current_conjunction(self, debr, dist):
@@ -460,25 +498,28 @@ class Environment:
                 step in time when to request the next action (mjd2000).
         """
         self._update_action_number(action_number)
+        
         self.next_action = pk.epoch(
             self.state["epoch"].mjd2000 + float(action[3]), "mjd2000")
-        print(f'doccking situation {self.is_docked}')
-        if action_number < 2 and self.is_docked==[]:
-            print(f'servicer is acting at {self.servicer.satellite.eph(self.state["epoch"])},{self.state["epoch"]} and {action[:3]}')
+        
+        #print(f'present action time :{self.state["epoch"].mjd2000} and next action time is {self.next_action.mjd2000}')
+        
+        #print(f'doccking situation {self.is_docked}')
+        if action_number < 2:
+          
             error, fuel_cons = self.servicer.maneuver(
             action[:3], self.state["epoch"])
-            print(f'fuel level of servicer is {self.servicer.fuel}')
+            
         else:
-            #error, fuel_cons = self.servicer.maneuver(
-            #action[:3], self.state["epoch"])
-            print(f'protected is acting at {self.action_number},{self.state["epoch"]} and {action[:3]}')
+            
             error, fuel_cons = self.protected.maneuver(
             action[:3], self.state["epoch"])
-            print(f'fuel level of protected is {self.protected.fuel}')
+            
+            self.servicer.fuel -= fuel_cons
+            
         if not error:
             self.state["fuel"] -= fuel_cons
-        #self.action_number += 1
-        #print(self.action_number)
+       
         return error
 
     def get_total_collision_probability(self):
@@ -694,7 +735,7 @@ class SpaceObject:
         self.satellite = pk.planet.keplerian(t_man, list(pos), new_vel, mu_central_body,
                                              mu_self, radius, safe_radius, name)
         self.fuel -= fuel_cons
-        print(f'fuel level is {self.fuel}')
+        #print(f'fuel level is {self.fuel}')
         return "", fuel_cons
 
     def position(self, epoch):

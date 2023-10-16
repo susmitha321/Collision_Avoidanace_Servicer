@@ -199,10 +199,10 @@ Seconds before collision: {self.curr_alert_info["sec_before_collision"]}.
                                 title='Total collision probability', ylabel='prob')
         self.make_step_on_graph(self.subplot_f, self.time_arr, self.fuel_cons_arr,
                                 title='Total fuel consumption', ylabel='fuel (dV)')
-        print(f'time and dock pos printing {self.time_arr},{self.r_traj_dev_arr}')
+#         print(f'time and dock pos printing {self.time_arr},{self.r_traj_dev_arr}')
         self.make_step_on_graph(self.subplot_r_t, self.time_arr, self.r_traj_dev_arr,
                                 title='R Trajectory Deviation', ylabel='reward')
-        print(f'time and dock pos printing {self.time_arr},{self.dock_pos_arr}')
+#         print(f'time and dock pos printing {self.time_arr},{self.dock_pos_arr}')
         self.make_step_on_graph(self.subplot_d_p, self.time_arr, self.dock_pos_arr,
                                title = 'R Docking position', ylabel='dock position')
         self.make_step_on_graph(self.subplot_d_v, self.time_arr, self.dock_vel_arr,
@@ -290,7 +290,7 @@ class Simulator:
         self.curr_alert = None
         self.json_log_path = None
 
-    def run(self, visualize=False, n_steps_vis=1000, log=True, each_step_propagation=False,
+    def run(self, visualize=False, n_steps_vis=1000, log=False, each_step_propagation=False,
             print_out=False, json_log=False, n_orbits_alert=5., json_log_path="json_log.json"):
         """
         Args:
@@ -407,10 +407,12 @@ class Simulator:
             simulation_start_time = time.time()
         k = 0
         while True:
+            #print(f'current time is {self.curr_time.mjd2000}')
             self.env.propagate_forward(
                 self.curr_time.mjd2000, self.step, each_step_propagation)
 
             if self.curr_time.mjd2000 >= self.env.get_next_action().mjd2000:
+                #print(f'{self.curr_time.mjd2000}>{self.env.get_next_action().mjd2000}')
                 s = self.env.get_state()
                 action = self.agent.get_action(s)
                 # TODO: assert: no actions without alert
@@ -418,7 +420,7 @@ class Simulator:
                 #self.env.action_number += 1
                 
                 k += 1
-                print(k)
+                #print(k)
                 if log:
                     r = self.env.get_reward()
                     if err:
@@ -452,7 +454,7 @@ class Simulator:
                     if self.env.is_docked:
                         # Perform action on both servicer and protected
                         self.vis.plot_action(self.env.protected.position(self.curr_time)[0], self.curr_time)
-                        self.vis.plot_action(self.env.servicer.position(self.curr_time)[0], self.curr_time)
+                        #self.vis.plot_action(self.env.servicer.position(self.curr_time)[0], self.curr_time)
                         self.vis.pause(PAUSE_ACTION_TIME)
                     else:
                         # Perform action only on servicer

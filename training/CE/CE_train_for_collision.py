@@ -15,7 +15,7 @@ def main(args):
     
      # input parameteres
     parser.add_argument("-old-path", "--old_action_table", type=str,
-                        default="training/agents_tables/CE/action_table_CE_for_generated_collision_serv1_with_dummy.csv",
+                        default="training/agents_tables/CE/action_table_highfuel.csv",
                         required=False)
     
     # train parameters
@@ -61,9 +61,9 @@ def main(args):
     parser.add_argument("-save_path", "--save_action_table_path", type=str,
                         default="training/agents_tables/CE/action_table_CE.csv", required=False)
     parser.add_argument("-print", "--print_out", type=str,
-                        default="False", required=False)
+                        default="True", required=False)
     parser.add_argument("-progress", "--show_progress", type=str,
-                        default="False", required=False)
+                        default="True", required=False)
 
     args = parser.parse_args(args)
 
